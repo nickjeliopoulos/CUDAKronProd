@@ -51,7 +51,7 @@ namespace winter2024::kronecker {
 		const uint tx = threadIdx.x;
 
 		// Shared Memory and Variable Init.
-		__shared__ float smem_B[16][16];
+		__shared__ float smem_B[32][32];
 		float A_IJ = A[I][J];
 
 		// Load elements of B into Shared Memory
@@ -95,32 +95,32 @@ namespace winter2024::kronecker {
 
 		// Torch Dispatch
 		// TODO: Fix
-		// AT_DISPATCH_FLOATING_TYPES(torch::kFloat32, "gorby_kronecker", ([&]{ 
-		// 	_kronecker_sm80_bf16_bf16_cuda_kernel<float><<<threadblocks, threads>>>(
-		// 		A.packed_accessor32<torch::kFloat32, 2, torch::RestrictPtrTraits>(),
-		// 		B.packed_accessor32<torch::kFloat32, 2, torch::RestrictPtrTraits>(),
-		// 		C.packed_accessor32<torch::kFloat32, 2, torch::RestrictPtrTraits>(),
-		// 		problem_size.MA, 
-		// 		problem_size.NA, 
-		// 		problem_size.MB, 
-		// 		problem_size.NB, 
-		// 		problem_size.MC, 
-		// 		problem_size.NC
-		// 	); 
-		// }));
+		AT_DISPATCH_FLOATING_TYPES(C.type(), "gorby_kronecker", ([&]{ 
+			kronecker_sm80_bf16_bf16_cuda_kernel<float><<<threadblocks, threads>>>(
+				A.packed_accessor32<float, 2, torch::RestrictPtrTraits>(),
+				B.packed_accessor32<float, 2, torch::RestrictPtrTraits>(),
+				C.packed_accessor32<float, 2, torch::RestrictPtrTraits>(),
+				problem_size.MA, 
+				problem_size.NA, 
+				problem_size.MB, 
+				problem_size.NB, 
+				problem_size.MC, 
+				problem_size.NC
+			); 
+		}));
 
 		// Vanilla CUDA/C++ Kernel Launch
-		kronecker_sm80_bf16_bf16_cuda_kernel<float><<<threadblocks, threads>>>(
-			A.packed_accessor32<float, 2, torch::RestrictPtrTraits>(), 
-			B.packed_accessor32<float, 2, torch::RestrictPtrTraits>(), 
-			C.packed_accessor32<float, 2, torch::RestrictPtrTraits>(), 
-			problem_size.MA, 
-			problem_size.NA, 
-			problem_size.MB, 
-			problem_size.NB, 
-			problem_size.MC, 
-			problem_size.NC
-		);
+		// kronecker_sm80_bf16_bf16_cuda_kernel<float><<<threadblocks, threads>>>(
+		// 	A.packed_accessor32<float, 2, torch::RestrictPtrTraits>(), 
+		// 	B.packed_accessor32<float, 2, torch::RestrictPtrTraits>(), 
+		// 	C.packed_accessor32<float, 2, torch::RestrictPtrTraits>(), 
+		// 	problem_size.MA, 
+		// 	problem_size.NA, 
+		// 	problem_size.MB, 
+		// 	problem_size.NB, 
+		// 	problem_size.MC, 
+		// 	problem_size.NC
+		// );
 
 		return C;
 	}
