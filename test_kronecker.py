@@ -36,6 +36,6 @@ if __name__ == "__main__":
 	reference = torch_kronecker_product(A, B)
 	test = gorby_kronecker_product(A, B)
 
-	print(f"Reference:\n{reference}")
-	print(f"Test:\n{test}")
-	print(f"All Close?: {torch.allclose(reference, test)}")
+	print(f"Reference:\n{reference}\n")
+	print(f"Test:\n{test}\n")
+	print(f"All Close?: {torch.allclose(reference, test)}\n")
