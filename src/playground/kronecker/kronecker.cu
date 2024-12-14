@@ -35,7 +35,7 @@ namespace winter2024::kronecker {
 	// ASSUMPTION #1: MB*NB <= SM80_KRONECKER_PROBLEM_THREADS
 	// TODO: Solve this constraint, it should be easy with a simple for loop.
     template <typename scalar_t>
-	__global__ void _kronecker_sm80_bf16_bf16_cuda_kernel(
+	__global__ void kronecker_sm80_bf16_bf16_cuda_kernel(
 		const torch::PackedTensorAccessor32<scalar_t, 2, torch::RestrictPtrTraits> A, 
 		const torch::PackedTensorAccessor32<scalar_t, 2, torch::RestrictPtrTraits> B, 
 		torch::PackedTensorAccessor32<scalar_t, 2, torch::RestrictPtrTraits> C,
@@ -110,17 +110,17 @@ namespace winter2024::kronecker {
 		// }));
 
 		// Vanilla CUDA/C++ Kernel Launch
-		// _kronecker_sm80_bf16_bf16_cuda_kernel<float><<<threadblocks, threads>>>(
-		// 	A.packed_accessor32<torch::kFloat32, 2, at::RestrictPtrTraits>(), 
-		// 	B.packed_accessor32<torch::kBFloat16, 2, at::RestrictPtrTraits>(), 
-		// 	C.packed_accessor32<torch::kBFloat16, 2, at::RestrictPtrTraits>(), 
-		// 	problem_size.MA, 
-		// 	problem_size.NA, 
-		// 	problem_size.MB, 
-		// 	problem_size.NB, 
-		// 	problem_size.MC, 
-		// 	problem_size.NC
-		// );
+		kronecker_sm80_bf16_bf16_cuda_kernel<float><<<threadblocks, threads>>>(
+			A.packed_accessor32<float, 2, torch::RestrictPtrTraits>(), 
+			B.packed_accessor32<float, 2, torch::RestrictPtrTraits>(), 
+			C.packed_accessor32<float, 2, torch::RestrictPtrTraits>(), 
+			problem_size.MA, 
+			problem_size.NA, 
+			problem_size.MB, 
+			problem_size.NB, 
+			problem_size.MC, 
+			problem_size.NC
+		);
 
 		return C;
 	}
