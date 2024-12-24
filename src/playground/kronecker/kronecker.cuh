@@ -5,7 +5,7 @@
 
 
 namespace winter2024::kronecker {
-	at::Tensor kronecker_product(const torch::Tensor& A, const torch::Tensor& B);
+	torch::Tensor kronecker_product(const torch::Tensor& A, const torch::Tensor& B);
 
 
     PYBIND11_MODULE(TORCH_EXTENSION_NAME, m){
