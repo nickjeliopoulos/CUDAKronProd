@@ -115,6 +115,45 @@ namespace winter2024::kronecker {
 	}
 
 
+   template <typename scalar_t>
+	__global__ void kronecker_anyrow_smem_sm80_fp32_fp32_cuda_kernel(
+		const torch::PackedTensorAccessor64<scalar_t, 2, torch::RestrictPtrTraits> A, 
+		const torch::PackedTensorAccessor64<scalar_t, 2, torch::RestrictPtrTraits> B, 
+		torch::PackedTensorAccessor64<scalar_t, 2, torch::RestrictPtrTraits> C,
+		// Problem Size
+		const uint MA, 
+		const uint NA, 
+		const uint MB, 
+		const uint NB, 
+		const uint MC, 
+		const uint NC){
+		const uint I = blockIdx.x;
+		const uint J = blockIdx.y;
+		const uint stage_id = blockIdx.z;
+		const uint tx = threadIdx.x;
+
+		__shared__ float smem_B[SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS][SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_COLS];
+		const float AIJ = A[I][J];
+
+		// DEBUGGING
+		assert(SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_COLS == NB, "NB must be equal to SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_COLS");
+		static_assert(SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_COLS == SM80_KRONECKER_PROBLEM_THREADS, "SMEM B Cols should match # of threads");
+
+		// Prefill SMEM with chunk of B
+		#pragma unroll
+		for(uint k = 0; k < SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS; k++){
+			// Load B into SMEM
+			smem_B[k][tx] = B[stage_id*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS + k][tx];
+		}
+		__syncthreads();
+
+		#pragma unroll
+		for(uint k = 0; k < SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS; k++){
+			C[I*NB + stage_id*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS + k][J*NB + tx] = AIJ * B[stage_id*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS + k][tx];
+		}
+	}
+
+
 	// Operator for Kronecker Product
 	torch::Tensor kronecker_product(const torch::Tensor& A, const torch::Tensor& B){	
 		// Input Checking
@@ -141,7 +180,7 @@ namespace winter2024::kronecker {
 		// Torch Dispatch
 		// TODO: Decide implementation based on problem size
 		AT_DISPATCH_FLOATING_TYPES(C.type(), "gorby_kronecker", ([&]{ 
-			kronecker_anyrow_sm80_fp32_fp32_cuda_kernel<float><<<threadblocks, threads>>>(
+			kronecker_anyrow_smem_sm80_fp32_fp32_cuda_kernel<float><<<threadblocks, threads>>>(
 				A.packed_accessor64<float, 2, torch::RestrictPtrTraits>(),
 				B.packed_accessor64<float, 2, torch::RestrictPtrTraits>(),
 				C.packed_accessor64<float, 2, torch::RestrictPtrTraits>(),
