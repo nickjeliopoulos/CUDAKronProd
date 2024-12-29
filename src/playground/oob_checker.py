@@ -72,8 +72,8 @@ oob_checker_configs_sm80_kronecker_smem_fill = [
 	OOBCheckerProblemSizeAndKernelConfig(32, 32, 32, 256, 256),
 ]
 
-### Function(s) to test 
 
+### Function(s) to test 
 if __name__ == "__main__":
 	### Dummy Test
 	MA, NA, MB, NB, MC, NC, THREADS = oob_checker_configs_sm80_kronecker_smem_fill[0]()
