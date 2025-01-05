@@ -2,8 +2,10 @@ import os
 from setuptools import setup
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension, CppExtension, COMMON_MSVC_FLAGS
 
+
 if os.name == "nt":
     COMMON_MSVC_FLAGS += ['/Zc:__cplusplus']
+
 
 setup(
     ### Minimal Example Args

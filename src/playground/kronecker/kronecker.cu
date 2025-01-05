@@ -172,6 +172,8 @@ namespace winter2024::kronecker {
 		// DEBUGGING
 		assert(problem_size.num_stages > 0, "Number of stages must be greater than 0");
 
+		std::cout << "Problem Size Stages: " << problem_size.num_stages << std::endl;
+
 		// CUDA Kernel Launch:
 		// Set Kernel Launch Parameters + Launch
 		const dim3 threadblocks(problem_size.MA, problem_size.NA, problem_size.num_stages);

@@ -36,24 +36,35 @@ if __name__ == "__main__":
 	device = torch.device(args.device)
 	dtype = str_to_dtype_LUT[args.dtype]
 
+	torch.cuda.nvtx.mark("Tensor Init")
+
 	if args.M is not None and args.N is not None:
-		A = torch.randn(args.M, args.M, device=device, dtype=dtype)
-		B = torch.randn(args.N, args.N, device=device, dtype=dtype)
+		A = torch.randn(args.M, args.N, device=device, dtype=dtype)
+		B = torch.randn(args.M, args.N, device=device, dtype=dtype)
 	else:
 		A = torch.tensor([[1, 1], [1, -1]], dtype=dtype, device=device)
 		B = torch.tensor([[0.5, 0.5], [0.5, 0.5]], dtype=dtype, device=device)
 
+	print(f"A.shape: {A.shape}")
+	print(f"B.shape: {B.shape}")
+
+	torch.cuda.nvtx.mark("Torch")
+	torch_result = torch_kronecker_product(A, B)
+
+	torch.cuda.nvtx.mark("Gorby")
+	gorby_result = gorby_kronecker_product(A, B)
+
 	# Latency Test
-	median_reference = measure_median_latency(torch_kronecker_product, A, B)
-	median_test = measure_median_latency(gorby_kronecker_product, A, B)
+	# median_reference = measure_median_latency(torch_kronecker_product, A, B)
+	# median_test = measure_median_latency(gorby_kronecker_product, A, B)
 
-	print(f"Reference Median Latency: {median_reference:.1f} ms")
-	print(f"Gorby Median Latency: {median_test:.1f} ms")
+	# print(f"Reference Median Latency: {median_reference:.1f} ms")
+	# print(f"Gorby Median Latency: {median_test:.1f} ms")
 
-	# Numerical Test
-	reference = torch_kronecker_product(A, B)
-	test = gorby_kronecker_product(A, B)
+	# # Numerical Test
+	# reference = torch_kronecker_product(A, B)
+	# test = gorby_kronecker_product(A, B)
 
-	print(f"Reference Tensor:\n{reference}\n")
-	print(f"Gorby Tensor:\n{test}\n")
-	print(f"All Close?: {torch.allclose(reference, test)}\n")
+	print(f"Reference Tensor:\n{torch_result}\n")
+	print(f"Gorby Tensor:\n{gorby_result}\n")
+	# print(f"All Close?: {torch.allclose(torch_result, gorby_result)}\n")
