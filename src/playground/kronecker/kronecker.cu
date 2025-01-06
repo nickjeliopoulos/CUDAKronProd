@@ -116,6 +116,37 @@ namespace winter2024::kronecker {
 
 
    template <typename scalar_t>
+	__global__ void kronecker_multicol_sm80_fp32_fp32_cuda_kernel(
+		const torch::PackedTensorAccessor64<scalar_t, 2, torch::RestrictPtrTraits> A, 
+		const torch::PackedTensorAccessor64<scalar_t, 2, torch::RestrictPtrTraits> B, 
+		torch::PackedTensorAccessor64<scalar_t, 2, torch::RestrictPtrTraits> C,
+		// Problem Size
+		const uint MA, 
+		const uint NA, 
+		const uint MB, 
+		const uint NB, 
+		const uint MC, 
+		const uint NC,
+		const uint column_stages){
+		const uint I = blockIdx.x;
+		const uint J = blockIdx.y;
+		const uint stage_id = blockIdx.z;
+		const uint tx = threadIdx.x;
+
+		uint column_idx = 0;
+
+		// Prefill SMEM with chunk of B
+		#pragma unroll
+		for(uint k = 0; k < SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS; k++){
+			for(uint l = 0; l < column_stages; l++){
+				column_idx = l*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_COLS + tx;
+				if(column_idx < NB) C[I*MA + stage_id*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS + k][J*NA + column_idx] = A[I][J] * B[stage_id*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS + k][column_idx];
+			}
+		}
+	}
+
+
+   template <typename scalar_t>
 	__global__ void kronecker_anyrow_smem_sm80_fp32_fp32_cuda_kernel(
 		const torch::PackedTensorAccessor64<scalar_t, 2, torch::RestrictPtrTraits> A, 
 		const torch::PackedTensorAccessor64<scalar_t, 2, torch::RestrictPtrTraits> B, 
@@ -180,7 +211,6 @@ namespace winter2024::kronecker {
 
 		// Torch Dispatch
 		// TODO: Decide implementation based on problem size
-		// AT_DISPATCH_FLOATING_TYPES(C.type(), "gorby_kronecker", ([&]{ 
 		kronecker_anyrow_smem_sm80_fp32_fp32_cuda_kernel<float><<<threadblocks, threads>>>(
 			A.packed_accessor64<float, 2, torch::RestrictPtrTraits>(),
 			B.packed_accessor64<float, 2, torch::RestrictPtrTraits>(),
@@ -192,10 +222,10 @@ namespace winter2024::kronecker {
 			problem_size.MC, 
 			problem_size.NC
 		); 
-		// }));
 
 		return C;
 	}
+
 
 	// Operator for Kronecker Product
 	torch::Tensor kronecker_anyrow_product(const torch::Tensor& A, const torch::Tensor& B){	
@@ -227,7 +257,6 @@ namespace winter2024::kronecker {
 
 		// Torch Dispatch
 		// TODO: Decide implementation based on problem size
-		// AT_DISPATCH_FLOATING_TYPES(C.type(), "gorby_kronecker", ([&]{ 
 		kronecker_anyrow_sm80_fp32_fp32_cuda_kernel<float><<<threadblocks, threads>>>(
 			A.packed_accessor64<float, 2, torch::RestrictPtrTraits>(),
 			B.packed_accessor64<float, 2, torch::RestrictPtrTraits>(),
@@ -239,9 +268,57 @@ namespace winter2024::kronecker {
 			problem_size.MC, 
 			problem_size.NC
 		); 
-		// }));
 
 		return C;
 	}
+
+
+	// Operator for Kronecker Product
+	torch::Tensor kronecker_multicol_product(const torch::Tensor& A, const torch::Tensor& B){	
+		// Input Checking
+		// TORCH_CHECK(A.scalar_type() == torch::kBFloat16, "A must be of type BF16");
+		// TORCH_CHECK(B.scalar_type() == torch::kBFloat16, "A must be of type BF16");
+		TORCH_CHECK(A.dim() == 2, "A must be a 2D Tensor");
+		TORCH_CHECK(B.dim() == 2, "B must be a 2D Tensor");
+		TORCH_CHECK(A.is_cuda(), "Tensor A must be a CUDA tensor");
+		TORCH_CHECK(B.is_cuda(), "Tensor B must be a CUDA tensor");
+		TORCH_CHECK(A.get_device() == B.get_device(), "Tensors A and B must be on the same device");
+
+		// Get Problem Size + Initialize C
+		const problem_size_t problem_size = get_kronecker_problem_size(A, B);
+		torch::Tensor C = torch::empty({problem_size.MC, problem_size.NC}, A.options());
+
+		// DEBUGGING
+		assert(problem_size.num_stages > 0);
+
+		// CUDA Kernel Launch:
+		// Set Kernel Launch Parameters + Launch
+		const dim3 threadblocks(problem_size.MA, problem_size.NA, problem_size.num_stages);
+		const dim3 threads(SM80_KRONECKER_PROBLEM_THREADS);
+
+		std::string function_name = __func__;
+		std::cout << function_name << ":" << std::endl;
+		std::cout << "Threadblocks: " << threadblocks.x << " " << threadblocks.y << " " << threadblocks.z << std::endl;
+		std::cout << "Threads: " << threads.x << std::endl;
+
+		// Torch Dispatch
+		// TODO: Decide implementation based on problem size
+		kronecker_multicol_sm80_fp32_fp32_cuda_kernel<float><<<threadblocks, threads>>>(
+			A.packed_accessor64<float, 2, torch::RestrictPtrTraits>(),
+			B.packed_accessor64<float, 2, torch::RestrictPtrTraits>(),
+			C.packed_accessor64<float, 2, torch::RestrictPtrTraits>(),
+			problem_size.MA, 
+			problem_size.NA, 
+			problem_size.MB, 
+			problem_size.NB, 
+			problem_size.MC, 
+			problem_size.NC,
+			// Replacement for: (uint)ceil( (float)NB / SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_COLS)
+			(problem_size.NB + SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_COLS - 1U) / SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_COLS
+		); 
+
+		return C;
+	}
+
 
 }
