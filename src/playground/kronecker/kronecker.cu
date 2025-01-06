@@ -145,7 +145,7 @@ namespace winter2024::kronecker {
 
 		#pragma unroll
 		for(uint k = 0; k < SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS; k++){
-			C[I*NB + stage_id*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS + k][J*NB + tx] = AIJ * smem_B[k][tx];
+			C[I*MA + stage_id*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS + k][J*NA + tx] = A[I][J] * smem_B[k][tx];
 		}
 	}
 
