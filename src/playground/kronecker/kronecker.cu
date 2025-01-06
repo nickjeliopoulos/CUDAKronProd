@@ -103,14 +103,14 @@ namespace winter2024::kronecker {
 		const uint stage_id = blockIdx.z;
 		const uint tx = threadIdx.x;
 
-		// DEBUGGING
-		assert(SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_COLS == NB, "NB must be equal to SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_COLS");
-		static_assert(SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_COLS == SM80_KRONECKER_PROBLEM_THREADS, "SMEM B Cols should match # of threads");
 
 		// Prefill SMEM with chunk of B
 		#pragma unroll
 		for(uint k = 0; k < SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS; k++){
-			C[I*NB + stage_id*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS + k][J*NB + tx] = A[I][J] * B[stage_id*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS + k][tx];
+			// Needs some milk - Illegal Mem Access Error!
+			// PROBLEM 1: I*NB should be I*MA
+			// C[I*NB + stage_id*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS + k][J*NB + tx] = A[I][J] * B[stage_id*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS + k][tx];
+			C[I*MA + stage_id*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS + k][J*NA + tx] = A[I][J] * B[stage_id*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS + k][tx];
 		}
 	}
 
@@ -135,10 +135,6 @@ namespace winter2024::kronecker {
 		__shared__ float smem_B[SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS][SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_COLS];
 		const float AIJ = A[I][J];
 
-		// DEBUGGING
-		assert(SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_COLS == NB, "NB must be equal to SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_COLS");
-		static_assert(SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_COLS == SM80_KRONECKER_PROBLEM_THREADS, "SMEM B Cols should match # of threads");
-
 		// Prefill SMEM with chunk of B
 		#pragma unroll
 		for(uint k = 0; k < SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS; k++){
@@ -149,13 +145,13 @@ namespace winter2024::kronecker {
 
 		#pragma unroll
 		for(uint k = 0; k < SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS; k++){
-			C[I*NB + stage_id*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS + k][J*NB + tx] = AIJ * B[stage_id*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS + k][tx];
+			C[I*NB + stage_id*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS + k][J*NB + tx] = AIJ * smem_B[k][tx];
 		}
 	}
 
 
 	// Operator for Kronecker Product
-	torch::Tensor kronecker_product(const torch::Tensor& A, const torch::Tensor& B){	
+	torch::Tensor kronecker_smem_anyrow_product(const torch::Tensor& A, const torch::Tensor& B){	
 		// Input Checking
 		// TORCH_CHECK(A.scalar_type() == torch::kBFloat16, "A must be of type BF16");
 		// TORCH_CHECK(B.scalar_type() == torch::kBFloat16, "A must be of type BF16");
@@ -170,31 +166,82 @@ namespace winter2024::kronecker {
 		torch::Tensor C = torch::empty({problem_size.MC, problem_size.NC}, A.options());
 
 		// DEBUGGING
-		assert(problem_size.num_stages > 0, "Number of stages must be greater than 0");
-
-		std::cout << "Problem Size Stages: " << problem_size.num_stages << std::endl;
+		assert(problem_size.num_stages > 0);
 
 		// CUDA Kernel Launch:
 		// Set Kernel Launch Parameters + Launch
 		const dim3 threadblocks(problem_size.MA, problem_size.NA, problem_size.num_stages);
 		const dim3 threads(SM80_KRONECKER_PROBLEM_THREADS);
 
+		std::string function_name = __func__;
+		std::cout << function_name << ":" << std::endl;
+		std::cout << "Threadblocks: " << threadblocks.x << " " << threadblocks.y << " " << threadblocks.z << std::endl;
+		std::cout << "Threads: " << threads.x << std::endl;
+
 		// Torch Dispatch
 		// TODO: Decide implementation based on problem size
-		AT_DISPATCH_FLOATING_TYPES(C.type(), "gorby_kronecker", ([&]{ 
-			kronecker_anyrow_smem_sm80_fp32_fp32_cuda_kernel<float><<<threadblocks, threads>>>(
-				A.packed_accessor64<float, 2, torch::RestrictPtrTraits>(),
-				B.packed_accessor64<float, 2, torch::RestrictPtrTraits>(),
-				C.packed_accessor64<float, 2, torch::RestrictPtrTraits>(),
-				problem_size.MA, 
-				problem_size.NA, 
-				problem_size.MB, 
-				problem_size.NB, 
-				problem_size.MC, 
-				problem_size.NC
-			); 
-		}));
+		// AT_DISPATCH_FLOATING_TYPES(C.type(), "gorby_kronecker", ([&]{ 
+		kronecker_anyrow_smem_sm80_fp32_fp32_cuda_kernel<float><<<threadblocks, threads>>>(
+			A.packed_accessor64<float, 2, torch::RestrictPtrTraits>(),
+			B.packed_accessor64<float, 2, torch::RestrictPtrTraits>(),
+			C.packed_accessor64<float, 2, torch::RestrictPtrTraits>(),
+			problem_size.MA, 
+			problem_size.NA, 
+			problem_size.MB, 
+			problem_size.NB, 
+			problem_size.MC, 
+			problem_size.NC
+		); 
+		// }));
 
 		return C;
 	}
+
+	// Operator for Kronecker Product
+	torch::Tensor kronecker_anyrow_product(const torch::Tensor& A, const torch::Tensor& B){	
+		// Input Checking
+		// TORCH_CHECK(A.scalar_type() == torch::kBFloat16, "A must be of type BF16");
+		// TORCH_CHECK(B.scalar_type() == torch::kBFloat16, "A must be of type BF16");
+		TORCH_CHECK(A.dim() == 2, "A must be a 2D Tensor");
+		TORCH_CHECK(B.dim() == 2, "B must be a 2D Tensor");
+		TORCH_CHECK(A.is_cuda(), "Tensor A must be a CUDA tensor");
+		TORCH_CHECK(B.is_cuda(), "Tensor B must be a CUDA tensor");
+		TORCH_CHECK(A.get_device() == B.get_device(), "Tensors A and B must be on the same device");
+
+		// Get Problem Size + Initialize C
+		const problem_size_t problem_size = get_kronecker_problem_size(A, B);
+		torch::Tensor C = torch::empty({problem_size.MC, problem_size.NC}, A.options());
+
+		// DEBUGGING
+		assert(problem_size.num_stages > 0);
+
+		// CUDA Kernel Launch:
+		// Set Kernel Launch Parameters + Launch
+		const dim3 threadblocks(problem_size.MA, problem_size.NA, problem_size.num_stages);
+		const dim3 threads(SM80_KRONECKER_PROBLEM_THREADS);
+
+		std::string function_name = __func__;
+		std::cout << function_name << ":" << std::endl;
+		std::cout << "Threadblocks: " << threadblocks.x << " " << threadblocks.y << " " << threadblocks.z << std::endl;
+		std::cout << "Threads: " << threads.x << std::endl;
+
+		// Torch Dispatch
+		// TODO: Decide implementation based on problem size
+		// AT_DISPATCH_FLOATING_TYPES(C.type(), "gorby_kronecker", ([&]{ 
+		kronecker_anyrow_sm80_fp32_fp32_cuda_kernel<float><<<threadblocks, threads>>>(
+			A.packed_accessor64<float, 2, torch::RestrictPtrTraits>(),
+			B.packed_accessor64<float, 2, torch::RestrictPtrTraits>(),
+			C.packed_accessor64<float, 2, torch::RestrictPtrTraits>(),
+			problem_size.MA, 
+			problem_size.NA, 
+			problem_size.MB, 
+			problem_size.NB, 
+			problem_size.MC, 
+			problem_size.NC
+		); 
+		// }));
+
+		return C;
+	}
+
 }
