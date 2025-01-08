@@ -18,6 +18,7 @@ def conditional_colorizer(condition: bool, text: str, colors: List) -> str:
 	color = colors[0] if condition else colors[1]
 	return f"\033[1;{color}m{text}\033[0m"
 
+
 def measure_median_latency(func, *args, **kwargs):
 	timer = Timer(
 		stmt='func(*args, **kwargs)',
@@ -42,8 +43,10 @@ str_to_kron_variant_callable_LUT = {
 }
 
 ### Each entry under size is a Tuple with shape (AM,AN, BM, BN)
+### A = [AM, AN]
+### B = [BM, BN]
+### C = [AM*BM, AN*BN]
 workload_test_sizes = [
-	###
 	(2, 512, 4, 512),
 	(3, 512, 4, 512),
 	(4, 512, 4, 768),
@@ -51,12 +54,6 @@ workload_test_sizes = [
 	(16, 512, 16, 512),
 	(8, 512, 8, 512),
 	(4, 512, 4, 512),
-	### 
-	# (16, 512, 24, 768),
-	# (4, 512, 4, 1024),
-	# (18, 512, 4, 1024),
-	# (23, 512, 4, 1024),
-	# (32, 512, 8, 1024),
 ]
 
 
@@ -80,16 +77,15 @@ if __name__ == "__main__":
 	failed_test_pass_shapes = []
 
 	for (AM, AN, BM, BN) in workload_test_sizes:
+		### Tensor Init
 		A = torch.randn(AM, AN, device=device, dtype=dtype)
 		B = torch.randn(BM, BN, device=device, dtype=dtype)
-
-		# print(f"A.shape: {A.shape}")
-		# print(f"B.shape: {B.shape}")
 
 		print(f"{'='*48}")
 		print(f"A = [{A.shape[0]},{A.shape[1]}] | B = [{B.shape[0]},{B.shape[1]}] | C = [{A.shape[0]*B.shape[0]},{A.shape[1]*B.shape[1]}]")
 		print(f"{'='*48}")
 
+		### Invoke test and baseline
 		test_result = test_operator(A, B)
 		torch_result = torch_kronecker_product(A, B)
 		
@@ -107,8 +103,9 @@ if __name__ == "__main__":
 			if not numerically_correct:
 				failed_test_pass_shapes.append((AM, AN, BM, BN))
 
-		print(f"{'='*48}")
-
+		print(f"\n{'='*48}")
+	
+	### Summarize Results
 	if not args.check_runtime_only:
 		all_passed = all(test_pass_comparison_list)
 		text = conditional_colorizer(all_passed, f"{all_passed}", [GREEN, RED])

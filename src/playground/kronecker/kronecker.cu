@@ -200,7 +200,14 @@ namespace winter2024::kronecker {
 
 	//
 	// Core Operators
+	// Each of these operators is designed to handle a set of specific problems sizes OR has some type of alternative implementation (naive, or optimized for some type of metric)
 	//
+
+	// Kronecker Product Operator Implementations
+	// "tiny" is for very small problem sizes
+	// "anyrow" is designed to handle any row shape, but requires that one column of B (BN) corresponds exactly to the number of threads in a threadblock (BN == SM80_KRONECKER_PROBLEM_THREADS)
+	// "anyrow_smem" is similar to "anyrow", but precaches B into shared memory
+	// "anyrow_anycol" is designed to handle any row shape, and any column shape
 	torch::Tensor kronecker_anyrow_smem_product(const torch::Tensor& A, const torch::Tensor& B){	
 		validate_input(A, B);
 
