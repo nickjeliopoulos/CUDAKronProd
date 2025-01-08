@@ -1,7 +1,7 @@
 import torch
 torch.manual_seed(37)
 import argparse
-from gorby_kronecker import kronecker_tiny_product, kronecker_anyrow_product, kronecker_anyrow_smem_product, kronecker_anyrow_anycol_product
+from gorby_kronecker import kronecker_product, kronecker_anyrow_anycol_product
 from torch.utils.benchmark import Timer
 from typing import List, Dict, Any, Tuple
 
@@ -31,15 +31,12 @@ def measure_median_latency(func, *args, **kwargs):
 str_to_dtype_LUT = {
 	"float32": torch.float32,
 	"float16": torch.float16,
-	"bfloat16": torch.bfloat16
+	"bfloat16": torch.bfloat16,
 }
 
 str_to_kron_variant_callable_LUT = {
-	"tiny": kronecker_tiny_product,
-	"anyrow": kronecker_anyrow_product,
-	"anyrow_smem": kronecker_anyrow_smem_product,
 	"anyrow_anycol": kronecker_anyrow_anycol_product,
-	"adaptive": None
+	"adaptive": kronecker_product,
 }
 
 ### Each entry under size is a Tuple with shape (AM,AN, BM, BN)

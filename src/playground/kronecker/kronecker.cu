@@ -19,7 +19,7 @@ namespace winter2024::kronecker {
 		};
 
 		constexpr uint SM80_THREADS_PER_WARP = 32;
-		constexpr uint SM80_KRONECKER_PROBLEM_THREADS = 512;
+		constexpr uint SM80_KRONECKER_PROBLEM_THREADS = 256;
 		constexpr uint SM80_KRONECKER_PROBLEM_WARPS = SM80_KRONECKER_PROBLEM_THREADS / SM80_THREADS_PER_WARP;
 		constexpr uint SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS = 4;
 		constexpr uint SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_COLS = SM80_KRONECKER_PROBLEM_THREADS;
@@ -69,31 +69,40 @@ namespace winter2024::kronecker {
 		const uint MC, 
 		const uint NC,
 		const uint column_stages){
+		// Get Thread Index
 		const uint I = blockIdx.x;
 		const uint J = blockIdx.y;
 		const uint stage_id = blockIdx.z;
 		const uint tx = threadIdx.x;
 
-		uint column_idx = 0;
-
-		// TODO: Adapt 
+		// Shared Memory, thread constants
 		// __shared__ float smem_B[SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS][SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_COLS];
-		// const float AIJ = A[I][J];
+		const float AIJ = A[I][J];
 
-		// // Prefill SMEM with chunk of B
+		// Loop Variables (can help nvcc with unrolling loops)
+		uint column_idx = 0;
+	
+		// Prefill SMEM with chunk of B
 		// #pragma unroll
-		// for(uint k = 0; k < SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS; k++){
+		// for(int32_t k = 0; k < SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS; k++){
 		// 	// Load B into SMEM
 		// 	smem_B[k][tx] = B[stage_id*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS + k][tx];
 		// }
-		// __syncthreads();
+		// __syncwarp();
 
-		// Prefill SMEM with chunk of B
 		#pragma unroll
-		for(uint k = 0; k < SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS; k++){
-			for(uint l = 0; l < column_stages; l++){
+		for(int32_t k = 0; k < SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS; k++){
+			// Handle all-but-last column chunk of C
+			for(int32_t l = 0; l < column_stages-1; l++){
 				column_idx = l*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_COLS + tx;
-				if(column_idx < NB) C[I*MA + stage_id*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS + k][J*NA + column_idx] = A[I][J] * B[stage_id*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS + k][column_idx];
+				C[I*MA + stage_id*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS + k][J*NA + column_idx] = __fmaf_ieee_rz(AIJ, B[stage_id*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS + k][column_idx], 0.0f);
+			}
+
+			// Handle last column chunk of C
+			// Need to check a condition to avoid out-of-bounds access
+			column_idx = (column_stages-1)*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_COLS + tx;
+			if(column_idx < NB){
+				C[I*MA + stage_id*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS + k][J*NA + column_idx] = __fmaf_ieee_rz(AIJ, B[stage_id*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS + k][column_idx], 0.0f);
 			}
 		}
 	}
@@ -151,7 +160,7 @@ namespace winter2024::kronecker {
 
 		std::cout << stringify_workload_information(__func__, threadblocks, threads);
 
-		kronecker_tiny_sm80_fp32_fp32_cuda_kernel<float><<<threadblocks, threads>>>(
+		kronecker_anyrow_anycol_sm80_fp32_fp32_cuda_kernel<float><<<threadblocks, threads>>>(
 			A.packed_accessor64<float, 2, torch::RestrictPtrTraits>(),
 			B.packed_accessor64<float, 2, torch::RestrictPtrTraits>(),
 			C.packed_accessor64<float, 2, torch::RestrictPtrTraits>(),
@@ -160,7 +169,9 @@ namespace winter2024::kronecker {
 			problem_size.MB, 
 			problem_size.NB, 
 			problem_size.MC, 
-			problem_size.NC
+			problem_size.NC,
+			// Replacement for: (uint)ceil( (float)NB / SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_COLS)
+			(problem_size.NB + SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_COLS - 1U) / SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_COLS
 		); 
 
 		return C;
