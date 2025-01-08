@@ -5,11 +5,12 @@ namespace winter2024::kronecker {
 	namespace{
 		using uint = unsigned int;
 
-		struct __builtin_align__(32) problem_size_t{
+		struct problem_size_t{
 			uint MA, NA;
 			uint MB, NB;
 			uint MC, NC;
 			uint num_stages;
+			uint num_stages_remainder;
 		};
 
 		struct __builtin_align__(8) dim2{
@@ -23,6 +24,20 @@ namespace winter2024::kronecker {
 		constexpr uint SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS = 4;
 		constexpr uint SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_COLS = SM80_KRONECKER_PROBLEM_THREADS;
 		constexpr uint SYNCWARP_ALL_MASK = 0b11111111111111111111111111111111;
+
+		void validate_input(const torch::Tensor& A, const torch::Tensor& B){
+			TORCH_CHECK(A.dim() == 2, "A must be a 2D Tensor");
+			TORCH_CHECK(B.dim() == 2, "B must be a 2D Tensor");
+			TORCH_CHECK(A.is_cuda(), "Tensor A must be a CUDA tensor");
+			TORCH_CHECK(B.is_cuda(), "Tensor B must be a CUDA tensor");
+			TORCH_CHECK(A.get_device() == B.get_device(), "Tensors A and B must be on the same device");
+		}
+
+		std::string stringify_workload_information(const char* function_name, const dim3& threadblocks, const dim3& threads){
+			char workload_info_str[128];
+			sprintf_s(workload_info_str, "%s: Thread Block <%d,%d,%d> | Threads <%d,%d,%d>\n", function_name, threadblocks.x, threadblocks.y, threadblocks.z, threads.x, threads.y, threads.z);
+			return std::string(workload_info_str);
+		}
 	}
 
 
@@ -35,6 +50,8 @@ namespace winter2024::kronecker {
 		problem_size.MC = problem_size.MA * problem_size.MB;
 		problem_size.NC = problem_size.NA * problem_size.NB;
 		problem_size.num_stages = problem_size.MB / SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS;
+		problem_size.num_stages_remainder = problem_size.MB % SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS;
+		assert(problem_size.num_stages > 0);
 		return problem_size;
 	}
 
@@ -181,33 +198,22 @@ namespace winter2024::kronecker {
 	}
 
 
-	// Operator for Kronecker Product
+	//
+	// Core Operators
+	//
 	torch::Tensor kronecker_anyrow_smem_product(const torch::Tensor& A, const torch::Tensor& B){	
-		// Input Checking
-		// TORCH_CHECK(A.scalar_type() == torch::kBFloat16, "A must be of type BF16");
-		// TORCH_CHECK(B.scalar_type() == torch::kBFloat16, "A must be of type BF16");
-		TORCH_CHECK(A.dim() == 2, "A must be a 2D Tensor");
-		TORCH_CHECK(B.dim() == 2, "B must be a 2D Tensor");
-		TORCH_CHECK(A.is_cuda(), "Tensor A must be a CUDA tensor");
-		TORCH_CHECK(B.is_cuda(), "Tensor B must be a CUDA tensor");
-		TORCH_CHECK(A.get_device() == B.get_device(), "Tensors A and B must be on the same device");
+		validate_input(A, B);
 
 		// Get Problem Size + Initialize C
 		const problem_size_t problem_size = get_kronecker_problem_size(A, B);
 		torch::Tensor C = torch::empty({problem_size.MC, problem_size.NC}, A.options());
-
-		// DEBUGGING
-		assert(problem_size.num_stages > 0);
 
 		// CUDA Kernel Launch:
 		// Set Kernel Launch Parameters + Launch
 		const dim3 threadblocks(problem_size.MA, problem_size.NA, problem_size.num_stages);
 		const dim3 threads(SM80_KRONECKER_PROBLEM_THREADS);
 
-		std::string function_name = __func__;
-		std::cout << function_name << ":" << std::endl;
-		std::cout << "Threadblocks: " << threadblocks.x << " " << threadblocks.y << " " << threadblocks.z << std::endl;
-		std::cout << "Threads: " << threads.x << std::endl;
+		std::cout << stringify_workload_information(__func__, threadblocks, threads);
 
 		// Torch Dispatch
 		// TODO: Decide implementation based on problem size
@@ -227,36 +233,18 @@ namespace winter2024::kronecker {
 	}
 
 
-	// Operator for Kronecker Product
 	torch::Tensor kronecker_anyrow_product(const torch::Tensor& A, const torch::Tensor& B){	
-		// Input Checking
-		// TORCH_CHECK(A.scalar_type() == torch::kBFloat16, "A must be of type BF16");
-		// TORCH_CHECK(B.scalar_type() == torch::kBFloat16, "A must be of type BF16");
-		TORCH_CHECK(A.dim() == 2, "A must be a 2D Tensor");
-		TORCH_CHECK(B.dim() == 2, "B must be a 2D Tensor");
-		TORCH_CHECK(A.is_cuda(), "Tensor A must be a CUDA tensor");
-		TORCH_CHECK(B.is_cuda(), "Tensor B must be a CUDA tensor");
-		TORCH_CHECK(A.get_device() == B.get_device(), "Tensors A and B must be on the same device");
+		validate_input(A, B);
 
 		// Get Problem Size + Initialize C
 		const problem_size_t problem_size = get_kronecker_problem_size(A, B);
 		torch::Tensor C = torch::empty({problem_size.MC, problem_size.NC}, A.options());
 
-		// DEBUGGING
-		assert(problem_size.num_stages > 0);
-
-		// CUDA Kernel Launch:
-		// Set Kernel Launch Parameters + Launch
 		const dim3 threadblocks(problem_size.MA, problem_size.NA, problem_size.num_stages);
 		const dim3 threads(SM80_KRONECKER_PROBLEM_THREADS);
 
-		std::string function_name = __func__;
-		std::cout << function_name << ":" << std::endl;
-		std::cout << "Threadblocks: " << threadblocks.x << " " << threadblocks.y << " " << threadblocks.z << std::endl;
-		std::cout << "Threads: " << threads.x << std::endl;
+		std::cout << stringify_workload_information(__func__, threadblocks, threads);
 
-		// Torch Dispatch
-		// TODO: Decide implementation based on problem size
 		kronecker_anyrow_sm80_fp32_fp32_cuda_kernel<float><<<threadblocks, threads>>>(
 			A.packed_accessor64<float, 2, torch::RestrictPtrTraits>(),
 			B.packed_accessor64<float, 2, torch::RestrictPtrTraits>(),
@@ -273,36 +261,20 @@ namespace winter2024::kronecker {
 	}
 
 
-	// Operator for Kronecker Product
 	torch::Tensor kronecker_anyrow_anycol_product(const torch::Tensor& A, const torch::Tensor& B){	
-		// Input Checking
-		// TORCH_CHECK(A.scalar_type() == torch::kBFloat16, "A must be of type BF16");
-		// TORCH_CHECK(B.scalar_type() == torch::kBFloat16, "A must be of type BF16");
-		TORCH_CHECK(A.dim() == 2, "A must be a 2D Tensor");
-		TORCH_CHECK(B.dim() == 2, "B must be a 2D Tensor");
-		TORCH_CHECK(A.is_cuda(), "Tensor A must be a CUDA tensor");
-		TORCH_CHECK(B.is_cuda(), "Tensor B must be a CUDA tensor");
-		TORCH_CHECK(A.get_device() == B.get_device(), "Tensors A and B must be on the same device");
+		validate_input(A, B);
 
 		// Get Problem Size + Initialize C
 		const problem_size_t problem_size = get_kronecker_problem_size(A, B);
 		torch::Tensor C = torch::empty({problem_size.MC, problem_size.NC}, A.options());
-
-		// DEBUGGING
-		assert(problem_size.num_stages > 0);
 
 		// CUDA Kernel Launch:
 		// Set Kernel Launch Parameters + Launch
 		const dim3 threadblocks(problem_size.MA, problem_size.NA, problem_size.num_stages);
 		const dim3 threads(SM80_KRONECKER_PROBLEM_THREADS);
 
-		std::string function_name = __func__;
-		std::cout << function_name << ":" << std::endl;
-		std::cout << "Threadblocks: " << threadblocks.x << " " << threadblocks.y << " " << threadblocks.z << std::endl;
-		std::cout << "Threads: " << threads.x << std::endl;
+		std::cout << stringify_workload_information(__func__, threadblocks, threads);
 
-		// Torch Dispatch
-		// TODO: Decide implementation based on problem size
 		kronecker_anyrow_anycol_sm80_fp32_fp32_cuda_kernel<float><<<threadblocks, threads>>>(
 			A.packed_accessor64<float, 2, torch::RestrictPtrTraits>(),
 			B.packed_accessor64<float, 2, torch::RestrictPtrTraits>(),
@@ -321,36 +293,20 @@ namespace winter2024::kronecker {
 	}
 
 
-	// Operator for Kronecker Product
 	torch::Tensor kronecker_tiny_product(const torch::Tensor& A, const torch::Tensor& B){	
-		// Input Checking
-		// TORCH_CHECK(A.scalar_type() == torch::kBFloat16, "A must be of type BF16");
-		// TORCH_CHECK(B.scalar_type() == torch::kBFloat16, "A must be of type BF16");
-		TORCH_CHECK(A.dim() == 2, "A must be a 2D Tensor");
-		TORCH_CHECK(B.dim() == 2, "B must be a 2D Tensor");
-		TORCH_CHECK(A.is_cuda(), "Tensor A must be a CUDA tensor");
-		TORCH_CHECK(B.is_cuda(), "Tensor B must be a CUDA tensor");
-		TORCH_CHECK(A.get_device() == B.get_device(), "Tensors A and B must be on the same device");
+		validate_input(A, B);
 
 		// Get Problem Size + Initialize C
 		const problem_size_t problem_size = get_kronecker_problem_size(A, B);
 		torch::Tensor C = torch::empty({problem_size.MC, problem_size.NC}, A.options());
-
-		// DEBUGGING
-		assert(problem_size.num_stages > 0);
 
 		// CUDA Kernel Launch:
 		// Set Kernel Launch Parameters + Launch
 		const dim3 threadblocks(problem_size.MA, problem_size.NA, problem_size.num_stages);
 		const dim3 threads(SM80_KRONECKER_PROBLEM_THREADS);
 
-		std::string function_name = __func__;
-		std::cout << function_name << ":" << std::endl;
-		std::cout << "Threadblocks: " << threadblocks.x << " " << threadblocks.y << " " << threadblocks.z << std::endl;
-		std::cout << "Threads: " << threads.x << std::endl;
+		std::cout << stringify_workload_information(__func__, threadblocks, threads);
 
-		// Torch Dispatch
-		// TODO: Decide implementation based on problem size
 		kronecker_tiny_sm80_fp32_fp32_cuda_kernel<float><<<threadblocks, threads>>>(
 			A.packed_accessor64<float, 2, torch::RestrictPtrTraits>(),
 			B.packed_accessor64<float, 2, torch::RestrictPtrTraits>(),
@@ -366,4 +322,36 @@ namespace winter2024::kronecker {
 		return C;
 	}
 
+
+	//
+	// Adapative Kronecker Operator - invoke the corresponding Core Operator based on problem size
+	//
+	torch::Tensor kronecker_product(const torch::Tensor& A, const torch::Tensor& B){	
+		validate_input(A, B);
+
+		// Get Problem Size + Initialize C
+		const problem_size_t problem_size = get_kronecker_problem_size(A, B);
+		torch::Tensor C = torch::empty({problem_size.MC, problem_size.NC}, A.options());
+
+		// CUDA Kernel Launch:
+		// Set Kernel Launch Parameters + Launch
+		const dim3 threadblocks(problem_size.MA, problem_size.NA, problem_size.num_stages);
+		const dim3 threads(SM80_KRONECKER_PROBLEM_THREADS);
+
+		std::cout << stringify_workload_information(__func__, threadblocks, threads);
+
+		kronecker_tiny_sm80_fp32_fp32_cuda_kernel<float><<<threadblocks, threads>>>(
+			A.packed_accessor64<float, 2, torch::RestrictPtrTraits>(),
+			B.packed_accessor64<float, 2, torch::RestrictPtrTraits>(),
+			C.packed_accessor64<float, 2, torch::RestrictPtrTraits>(),
+			problem_size.MA, 
+			problem_size.NA, 
+			problem_size.MB, 
+			problem_size.NB, 
+			problem_size.MC, 
+			problem_size.NC
+		); 
+
+		return C;
+	}
 }

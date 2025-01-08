@@ -48,6 +48,9 @@ workload_test_sizes = [
 	(3, 512, 4, 512),
 	(4, 512, 4, 768),
 	(7, 512, 4, 768),
+	(16, 512, 16, 512),
+	(8, 512, 8, 512),
+	(4, 512, 4, 512),
 	### 
 	# (16, 512, 24, 768),
 	# (4, 512, 4, 1024),
@@ -80,8 +83,12 @@ if __name__ == "__main__":
 		A = torch.randn(AM, AN, device=device, dtype=dtype)
 		B = torch.randn(BM, BN, device=device, dtype=dtype)
 
-		print(f"A.shape: {A.shape}")
-		print(f"B.shape: {B.shape}")
+		# print(f"A.shape: {A.shape}")
+		# print(f"B.shape: {B.shape}")
+
+		print(f"{'='*48}")
+		print(f"A = [{A.shape[0]},{A.shape[1]}] | B = [{B.shape[0]},{B.shape[1]}] | C = [{A.shape[0]*B.shape[0]},{A.shape[1]*B.shape[1]}]")
+		print(f"{'='*48}")
 
 		test_result = test_operator(A, B)
 		torch_result = torch_kronecker_product(A, B)
