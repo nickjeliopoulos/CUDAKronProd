@@ -21,9 +21,8 @@ namespace winter2024::kronecker {
 		constexpr uint SM80_THREADS_PER_WARP = 32;
 		constexpr uint SM80_KRONECKER_PROBLEM_THREADS = 256;
 		constexpr uint SM80_KRONECKER_PROBLEM_WARPS = SM80_KRONECKER_PROBLEM_THREADS / SM80_THREADS_PER_WARP;
-		constexpr uint SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS = 4;
+		constexpr uint SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS = 1;
 		constexpr uint SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_COLS = SM80_KRONECKER_PROBLEM_THREADS;
-		constexpr uint SYNCWARP_ALL_MASK = 0b11111111111111111111111111111111;
 
 		void validate_input(const torch::Tensor& A, const torch::Tensor& B){
 			TORCH_CHECK(A.dim() == 2, "A must be a 2D Tensor");
@@ -95,14 +94,14 @@ namespace winter2024::kronecker {
 			// Handle all-but-last column chunk of C
 			for(int32_t l = 0; l < column_stages-1; l++){
 				column_idx = l*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_COLS + tx;
-				C[I*MA + stage_id*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS + k][J*NA + column_idx] = __fmaf_ieee_rz(AIJ, B[stage_id*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS + k][column_idx], 0.0f);
+				C[I*MB + stage_id*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS + k][J*NB + column_idx] = __fmaf_rz(AIJ, B[stage_id*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS + k][column_idx], 0.0f);
 			}
 
 			// Handle last column chunk of C
 			// Need to check a condition to avoid out-of-bounds access
 			column_idx = (column_stages-1)*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_COLS + tx;
 			if(column_idx < NB){
-				C[I*MA + stage_id*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS + k][J*NA + column_idx] = __fmaf_ieee_rz(AIJ, B[stage_id*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS + k][column_idx], 0.0f);
+				C[I*MB + stage_id*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS + k][J*NB + column_idx] = __fmaf_rz(AIJ, B[stage_id*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS + k][column_idx], 0.0f);
 			}
 		}
 	}
