@@ -95,6 +95,8 @@ namespace winter2024::kronecker {
 			for(int32_t l = 0; l < column_stages-1; l++){
 				column_idx = l*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_COLS + tx;
 				C[I*MB + stage_id*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS + k][J*NB + column_idx] = __fmaf_rz(AIJ, B[stage_id*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS + k][column_idx], 0.0f);
+				// C[I*MB + stage_id*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS + k][J*NB + column_idx] = __fmaf_rz(AIJ, smem_B[k][tx], 0.0f);
+
 			}
 
 			// Handle last column chunk of C
@@ -102,6 +104,8 @@ namespace winter2024::kronecker {
 			column_idx = (column_stages-1)*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_COLS + tx;
 			if(column_idx < NB){
 				C[I*MB + stage_id*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS + k][J*NB + column_idx] = __fmaf_rz(AIJ, B[stage_id*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS + k][column_idx], 0.0f);
+				// C[I*MB + stage_id*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS + k][J*NB + column_idx] = __fmaf_rz(AIJ, smem_B[k][tx], 0.0f);
+
 			}
 		}
 	}
