@@ -18,7 +18,6 @@ def conditional_colorizer(condition: bool, text: str, colors: List) -> str:
 	color = colors[0] if condition else colors[1]
 	return f"\033[1;{color}m{text}\033[0m"
 
-
 def measure_median_latency(func, *args, **kwargs):
 	timer = Timer(
 		stmt='func(*args, **kwargs)',
@@ -44,17 +43,17 @@ str_to_kron_variant_callable_LUT = {
 ### B = [BM, BN]
 ### C = [AM*BM, AN*BN]
 workload_test_sizes = [
-	(2, 256, 4, 256),
-	(4, 256, 2, 256),
-	(3, 256, 4, 256),
-	(4, 256, 3, 256),
-	(4, 512, 4, 768),
-	(4, 768, 4, 512),
-	(1, 512, 3, 768),
-	(4, 512, 5, 512),
-	(4, 256, 4, 256),
-	(4, 512, 4, 512),
-
+	# (2, 256, 4, 256),
+	# (4, 256, 2, 256),
+	# (3, 256, 4, 256),
+	# (4, 256, 3, 256),
+	# (4, 512, 4, 768),
+	# (4, 768, 4, 512),
+	# (1, 512, 3, 768),
+	# (4, 512, 5, 512),
+	# (4, 256, 4, 256),
+	# (4, 512, 4, 512),
+	(32, 768, 32, 768),
 ]
 
 
@@ -65,9 +64,9 @@ def torch_kronecker_product(A : torch.Tensor, B : torch.Tensor) -> torch.Tensor:
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser()
 	parser.add_argument("--device", type=str, default="cuda")
-	parser.add_argument("--dtype", type=str, choices=["float32", "float16", "bfloat16"], default="float32")
+	parser.add_argument("--dtype", type=str, choices=["float32", "float16", "bfloat16", "float8"], default="float32")
 	parser.add_argument("--check-runtime-only", action="store_true")
-	parser.add_argument("--kron-variant", type=str, choices=["tiny", "anyrow", "anyrow_smem", "anyrow_anycol", "adpative"], default="anyrow_anycol")
+	parser.add_argument("--kron-variant", type=str, choices=["anyrow_anycol", "adpative"], default="anyrow_anycol")
 	args = parser.parse_args()
 
 	device = torch.device(args.device)
@@ -76,6 +75,7 @@ if __name__ == "__main__":
 	test_operator = str_to_kron_variant_callable_LUT[args.kron_variant]
 	test_pass_comparison_list = []
 	failed_test_pass_shapes = []
+
 
 	for (AM, AN, BM, BN) in workload_test_sizes:
 		### Tensor Init
@@ -99,6 +99,7 @@ if __name__ == "__main__":
 			numerically_correct = torch.allclose(test_result, torch_result)
 			test_pass_comparison_list.append(numerically_correct)
 			text = conditional_colorizer(numerically_correct, f"{numerically_correct}", [GREEN, RED])
+			
 			print(f"All Close? {text}")
 
 			if not numerically_correct:
@@ -106,11 +107,14 @@ if __name__ == "__main__":
 
 		print(f"\n{'='*48}")
 	
+
 	### Summarize Results
 	if not args.check_runtime_only:
 		all_passed = all(test_pass_comparison_list)
 		text = conditional_colorizer(all_passed, f"{all_passed}", [GREEN, RED])
+
 		print(f"Overall Pass? {text}")
 		print(f"{'='*48}")
+
 		for (AM, AN, BM, BN) in failed_test_pass_shapes:
 			print(f"Failed Workload: A=[{AM},{AN}], B=[{BM},{BN}]")

@@ -32,3 +32,5 @@ python benchmark.py --M 32 --N 512
 ```
 
 # Insights and Post-Mortem Thoughts
+> [!NOTE]
+> See `src/playground/README.md` for a more in-depth write-up of profiling results.
