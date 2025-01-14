@@ -1,7 +1,7 @@
 import torch
 torch.manual_seed(37)
 import argparse
-from gorby_kronecker import kronecker_product, kronecker_anyrow_anycol_product
+from gorby_kronecker import kronecker_product
 from torch.utils.benchmark import Timer
 from typing import List, Dict, Any, Tuple
 
@@ -14,9 +14,11 @@ MAGENTA = 35
 CYAN = 36
 WHITE = 37
 
+
 def conditional_colorizer(condition: bool, text: str, colors: List) -> str:
 	color = colors[0] if condition else colors[1]
 	return f"\033[1;{color}m{text}\033[0m"
+
 
 def measure_median_latency(func, *args, **kwargs):
 	timer = Timer(
@@ -33,10 +35,6 @@ str_to_dtype_LUT = {
 	"bfloat16": torch.bfloat16,
 }
 
-str_to_kron_variant_callable_LUT = {
-	"anyrow_anycol": kronecker_anyrow_anycol_product,
-	"adaptive": kronecker_product,
-}
 
 ### Each entry under size is a Tuple with shape (AM,AN, BM, BN)
 ### A = [AM, AN]
@@ -66,13 +64,12 @@ if __name__ == "__main__":
 	parser.add_argument("--device", type=str, default="cuda")
 	parser.add_argument("--dtype", type=str, choices=["float32", "float16", "bfloat16", "float8"], default="float32")
 	parser.add_argument("--check-runtime-only", action="store_true")
-	parser.add_argument("--kron-variant", type=str, choices=["anyrow_anycol", "adpative"], default="anyrow_anycol")
 	args = parser.parse_args()
 
 	device = torch.device(args.device)
 	dtype = str_to_dtype_LUT[args.dtype]
 
-	test_operator = str_to_kron_variant_callable_LUT[args.kron_variant]
+	test_operator = kronecker_product
 	test_pass_comparison_list = []
 	failed_test_pass_shapes = []
 

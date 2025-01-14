@@ -5,18 +5,13 @@
 
 
 namespace winter2024::kronecker {
-    // Core Operators
-    torch::Tensor kronecker_anyrow_anycol_product(const torch::Tensor& A, const torch::Tensor& B);
-
-    
-    // Adapative Operator which invokes Core operators based on input size
+    // Adapative operator which invokes kernels based on problem size
     torch::Tensor kronecker_product(const torch::Tensor& A, const torch::Tensor& B);
 
 
     // Register the operators to PyTorch via PyBind11
     PYBIND11_MODULE(TORCH_EXTENSION_NAME, m){
 		m.doc() = "Winter 2024 - CUDA Programming Side Project";
-        m.def("kronecker_anyrow_anycol_product", &kronecker_anyrow_anycol_product, "Kronecker Product Operator (Any-Row Dim, Any-Col Dim)");
         m.def("kronecker_product", &kronecker_product, "Kronecker Product Operator (Adaptive)");
     }
 }
