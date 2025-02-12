@@ -167,5 +167,7 @@ cython_debug/
 #.idea/
 
 *.txt
+*.cubin
+*.exe
 
 # Excludes (most important)

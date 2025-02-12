@@ -14,11 +14,6 @@ namespace winter2024::kronecker {
 			uint batched;
 		};
 
-		struct __builtin_align__(8) dim2{
-			uint x, y;
-			dim2(uint x, uint y) : x(x), y(y) {}
-		};
-
 		constexpr uint SM80_THREADS_PER_WARP = 32;
 		constexpr uint SM80_KRONECKER_PROBLEM_THREADS = 128;
 		constexpr uint SM80_KRONECKER_PROBLEM_WARPS = SM80_KRONECKER_PROBLEM_THREADS / SM80_THREADS_PER_WARP;
@@ -127,7 +122,7 @@ namespace winter2024::kronecker {
 			// Need to check a condition to avoid out-of-bounds access
 			column_idx = (column_stages-1)*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_COLS + tx;
 			if(column_idx < NB){
-				C[batch_id][I*MB + stage_id*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS + k][J*NB + column_idx] = __fmaf_rz(AIJ, B[batch_id][stage_id*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS + k][column_idx], 0.0f);
+				C[batch_id][I*MB + stage_id*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS + k][J*NB + column_idx] = __fmaf_rz(AIJ, B[batch_id] [stage_id*SM80_KRONECKER_COMPUTE_B_CHUNKS_SIZE_ROWS + k][column_idx], 0.0f);
 			}
 		}
 	}
