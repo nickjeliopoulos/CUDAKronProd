@@ -12,19 +12,23 @@
 ) {
 		.reg .f32 	%f<5>;
 		.reg .b32 	%r<5>;
-		.reg .b64 	%rd<8>;
+		.reg .b64 	%rd<7>;
 
 		ld.param.u64 	%rd1, [input_ptr];
 		ld.param.u64 	%rd2, [output_ptr];
 
+		// No guarantees that pointer parameters are in any particular address space
 		cvta.to.global.u64 	%rd3, %rd2;
 		cvta.to.global.u64 	%rd4, %rd1;
 
+		// Thread Block + Thread Indexing
 		mov.u32 	%r1, %ctaid.x;
 		mov.u32 	%r2, %ntid.x;
 		mov.u32 	%r3, %tid.x;
 		mad.lo.s32 	%r4, %r1, %r2, %r3;
 		mul.wide.s32 	%rd5, %r4, 4;
+
+		// Add the "index" in %rd5 to base pointer %rd4 for "input"
 		add.s64 	%rd6, %rd4, %rd5;
 		ld.global.f32 	%f1, [%rd6];
 
@@ -33,8 +37,8 @@
 		mov.f32 	%f3, 0f3F800000; // IEEE-754 representation of decimal 1.0 in hex!
 		fma.rn.f32 	%f4, %f1, %f3, %f2;
 
-		add.s64 	%rd7, %rd3, %rd5;
-		st.global.f32 	[%rd7], %f4;
+		add.s64 	%rd6, %rd3, %rd5;
+		st.global.f32 	[%rd6], %f4;
 
 		ret;
 }

@@ -1,6 +1,7 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 #include <iostream>
+#include <string>
 
 
 int main() {
@@ -19,7 +20,7 @@ int main() {
     cuCtxCreate(&cuContext, 0, cuDevice);
 
     // Load the module from the cubin file
-    if (cuModuleLoad(&cuModule, "ptx_inspect_source.cubin") != CUDA_SUCCESS) {
+    if (cuModuleLoad(&cuModule, "fmaf_manual.cubin") != CUDA_SUCCESS) {
         std::cerr << "Failed to load module\n";
         return 1;
     }
@@ -65,9 +66,15 @@ int main() {
     cudaMemcpy(h_output, d_output, size * sizeof(float), cudaMemcpyDeviceToHost);
 
 	// Print output
-	for (int i = 0; i < size; ++i) {
-		std::cout << h_output[i] << " ";
-	}
+	// for (int i = 0; i < size; ++i) {
+	// 	std::cout << h_output[i] << " ";
+	// }
+    std::string output_str;
+    for (int i = 0; i < size; ++i) {
+        output_str += std::to_string(h_output[i]) + " ";
+    }
+    std::cout << output_str << std::endl;
+
 
     // Clean up
     cudaFree(d_input);
