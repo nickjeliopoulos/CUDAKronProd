@@ -5,7 +5,6 @@ namespace winter2024::dual{
     namespace {
         constexpr int32_t SM80_WARP_SIZE = 32;
         constexpr int32_t SM80_DUAL_PROBLEM_THREADS = 256;
-        // Number of warps per block:
         constexpr int32_t SM80_DUAL_PROBLEM_WARPS = SM80_DUAL_PROBLEM_THREADS / SM80_WARP_SIZE;
     }
 
@@ -39,37 +38,38 @@ namespace winter2024::dual{
 		float right = c;
 
 		// SMEM
-        extern __shared__ float smem[3][4096];
+        // extern __shared__ float smem[3][4096];
 
         // Only proceed if within valid bounds.
-        if (batch < B && d_out < D_out) {
-            // Define the tile size as the number of threads.
-
-            // Process the input vector x[batch] in tiles.
-            for (int32_t tile_start = 0; tile_start < D_in; tile_start += tile_size) {
-                // Each thread loads one element of x into shared memory.
-                int32_t idx = tile_start + threadIdx.x;
-
-				// Check boundaries
-                if (idx < D_in) {
-                    smem[0][idx] = x[batch][idx];
-					smem[1][idx] = W[idx][d_out];
-					smem[2][idx] = V[idx][d_out];
-                } else {
-                    smem[0][idx] = 0.0f;
-					smem[1][idx] = 0.0f;
-					smem[2][idx] = 0.0f;                
-				}
-                __syncthreads();
+        if (d_out < D_out) {
+			// Blocking the D_in dimensions (GEMM K dimension)
+			for (int32_t din_offset = 0; din_offset < D_in; din_offset += tile_size) {
+				// SMEM Loading
+                // if (idx < D_in) {
+                //  smem[0][idx] = x[batch][din_idx];
+				// 	smem[1][idx] = W[din_idx][d_out];
+				// 	smem[2][idx] = V[din_idx][d_out];
+                // } else {
+                //     smem[0][idx] = 0.0f;
+				// 	smem[1][idx] = 0.0f;
+				// 	smem[2][idx] = 0.0f;                
+				// }
+                // __syncthreads();
 
                 // Determine how many elements are valid in this tile.
-                int32_t current_tile_size = (D_in - tile_start < tile_size) ? (D_in - tile_start) : tile_size;
+                int32_t current_tile_size = (D_in - din_offset < tile_size) ? (D_in - din_offset) : tile_size;
 
                 // Each thread iterates over the current tile to accumulate partial results.
                 // The same tile is used for both the W and V multiplications.
-                for (int32_t i = 0; i < current_tile_size; i++) {
-                    left += smem[0][i] * smem[1][i];
-                    right += smem[0][i] * smem[2][i];
+                for (int32_t din_idx = 0; din_idx < current_tile_size; din_idx++) {
+					int32_t idx = din_offset + din_idx;
+					// Speedy SMEM Access
+                    // left += smem[0][i] * smem[1][i];
+                    // right += smem[0][i] * smem[2][i];
+
+					// Slow Global Memory Access
+					left += x[batch][idx] * W[idx][d_out];
+					right += x[batch][idx] * V[idx][d_out];
                 }
                 __syncthreads();
             }

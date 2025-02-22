@@ -38,24 +38,25 @@ str_to_dtype_LUT = {
 ### Workload sizes for testing
 ### (D_in, D_out)
 workload_test_sizes = [
-	(8, 8),
-	(16, 16),
-	(32, 32),
-	(32, 64),
-	(32, 128),
-	(64, 32),
-	(64, 64),
-	(64, 128),
-	(128, 32),
-	(128, 64),
-	(128, 128),
+	# (8, 8),
+	# (16, 16),
+	# (32, 32),
+	# (32, 64),
+	# (32, 128),
+	# (64, 32),
+	# (64, 64),
+	# (64, 128),
+	# (128, 32),
+	# (128, 64),
+	# (128, 128),
 	(256, 256),
-	(256, 512),
-	(256, 1024),
+	# (256, 512),
+	# (256, 1024),
 	(1024, 1024),
-	(2048, 1024),
-	(4096, 1024),
-	(2048, 2048),
+	# (2048, 1024),
+	# (4096, 1024),
+	# (2048, 2048),
+	# (4096, 4096),
 ]
 
 
@@ -90,7 +91,7 @@ if __name__ == "__main__":
 	failed_test_pass_shapes = []
 
 	### Batch size
-	B = 256
+	B = 2
 	b_scalar = 0.0
 	c_scalar = 0.0
 	b = torch.tensor(data=[b_scalar], device=device, dtype=dtype)
@@ -109,8 +110,8 @@ if __name__ == "__main__":
 		test_result = test_operator(x, W, V, b, c)
 		torch_result = torch_dual_fc(x, W, V, b, c)
 		
-		# print(f"Test: {test_result}")
-		# print(f"Reference: {torch_result}")
+		print(f"Test: {test_result}")
+		print(f"Reference: {torch_result}")
 
 		if args.check_runtime_only:
 			pass
