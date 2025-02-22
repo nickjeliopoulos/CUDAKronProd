@@ -133,7 +133,7 @@ if __name__ == "__main__":
 
 	print(f"{'='*48}")
 	print(f"Overall Pass? {text}")
-	print(f"Pass Rate = {100 * sum(test_pass_comparison_list)/len(test_pass_comparison_list):.1f}%")
+	# print(f"Pass Rate = {100 * sum(test_pass_comparison_list)/len(test_pass_comparison_list):.1f}%")
 	print(f"{'='*48}")
 
 
