@@ -19,14 +19,16 @@ namespace winter2024::dual{
         torch::PackedTensorAccessor64<float, 2, torch::RestrictPtrTraits> C,
         float b,
         float c,
-        int32_t B, 
-        int32_t D_in, 
-        int32_t D_out
+        int32_t M, 
+        int32_t K, 
+        int32_t N
     ) {
-        // Each block handles one batch
-        int32_t batch = blockIdx.x;
-        // Each thread computes one output dimension.
-        int32_t d_out = blockIdx.y * blockDim.x + threadIdx.x;
+		// Constants
+		
+
+		// Indexing
+        int32_t m = blockIdx.x;
+        int32_t n = blockIdx.y * blockDim.x + threadIdx.x;
 
 		float left = b;
 		float right = c;        
@@ -35,14 +37,14 @@ namespace winter2024::dual{
         // extern __shared__ float x_tile[SM80_DUAL_PROBLEM_THREADS];
 
 		// Process the input in tiles.
-		for (int32_t tile_start = 0; tile_start < D_in; tile_start += 1) {
-			left += x[batch][tile_start] * W[tile_start][d_out];
-			right += x[batch][tile_start] * V[tile_start][d_out];
+		for (int32_t tile_start = 0; tile_start < K; tile_start += 1) {
+			left += x[m][tile_start] * W[tile_start][n];
+			right += x[m][tile_start] * V[tile_start][n];
 		}
 		__syncthreads();
 
-		C[batch][d_out] = left;
-		C[batch][D_out + d_out] = right;	
+		C[m][n] = left;
+		C[m][n+N] = right;	
     }
 
 
