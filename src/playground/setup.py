@@ -16,10 +16,13 @@ setup(
     ### https://github.com/NVIDIA/cutlass/issues/1474
     ext_modules=[
         # CUDAExtension(
-        #    name="gorby_kronecker", sources=["kronecker/kronecker.cu"],
+        #    name="gorby_kronecker", sources=["kronecker/kronecker.cu"], extra_compile_args={'nvcc' : ["-arch=sm_80"]}
+        # ),
+        # CUDAExtension(
+        #     name="gorby_swiglu", sources=["swiglu/swiglu.cu"], extra_compile_args={'nvcc' : ["-arch=sm_80"]}
         # ),
         CUDAExtension(
-            name="gorby_swiglu", sources=["swiglu/swiglu.cu"], extra_compile_args={'nvcc' : ["-arch=sm_80"]}
+            name="gorby_dual", sources=["dual/dual_fc.cu"], extra_compile_args={'nvcc' : ["-arch=sm_80"]}
         )
     ],
     cmdclass={"build_ext": BuildExtension},
