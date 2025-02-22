@@ -18,7 +18,7 @@ namespace winter2024::dual{
 	}
 
 
-	__global__ void dual_conv1x1_fp32_cuda_kernel(
+	__global__ void dual_fc_fp32_cuda_kernel(
         const torch::PackedTensorAccessor64<float, 2, torch::RestrictPtrTraits> x, 
         const torch::PackedTensorAccessor64<float, 2, torch::RestrictPtrTraits> W, 
         const torch::PackedTensorAccessor64<float, 2, torch::RestrictPtrTraits> V, 
@@ -30,6 +30,9 @@ namespace winter2024::dual{
         int32_t N
     ) {
 		// Indexing
+		const int32_t c_row = blockIdx.y;
+		const int32_t c_col = blockIdx.x;
+
 		const int32_t thread_row = threadIdx.x / (BLOCK_N / THREAD_TN);
 		const int32_t thread_col = threadIdx.x % (BLOCK_N / THREAD_TN);
 
@@ -42,8 +45,8 @@ namespace winter2024::dual{
 		const int32_t inner_col_WV = threadIdx.x % BLOCK_N;
 
 		// Block offsets
-		const int32_t threadblock_x_row_offset = blockIdx.y * BLOCK_M;
-		const int32_t threadblock_wv_col_offset = blockIdx.x * BLOCK_N;
+		const int32_t threadblock_x_row_offset = c_row * BLOCK_M;
+		const int32_t threadblock_wv_col_offset = c_col * BLOCK_N;
 		const int32_t threadblock_c_row_offset = threadblock_x_row_offset;
 		const int32_t threadblock_c_col_offset = threadblock_wv_col_offset;
 
@@ -64,12 +67,12 @@ namespace winter2024::dual{
 		for( int32_t block_k = 0; block_k < K; block_k += BLOCK_K ) {
 			// SMEM x Population
 			for( int32_t m_offset = 0; m_offset < BLOCK_M; m_offset += inner_row_x_stride ) {
-				shared_x[(m_offset + inner_row_x)][inner_col_x] = x[m_offset + inner_row_x + threadblock_x_row_offset][inner_col_x + block_k];
+				shared_x[m_offset + inner_row_x][inner_col_x] = x[m_offset + inner_row_x + threadblock_x_row_offset][inner_col_x + block_k];
 			}
 			// SMEM W,V Population
-			for( int32_t k_offset = 0; k_offset < BLOCK_N; k_offset += inner_row_WV_stride ) {
-				shared_W[(k_offset + inner_row_WV)][inner_col_WV] = W[k_offset + inner_row_WV + block_k][inner_col_WV + threadblock_wv_col_offset];
-				shared_V[(k_offset + inner_row_WV)][inner_col_WV] = V[k_offset + inner_row_WV + block_k][inner_col_WV + threadblock_wv_col_offset];
+			for( int32_t k_offset = 0; k_offset < BLOCK_K; k_offset += inner_row_WV_stride ) {
+				shared_W[k_offset + inner_row_WV][inner_col_WV] = W[k_offset + inner_row_WV + block_k][inner_col_WV + threadblock_wv_col_offset];
+				shared_V[k_offset + inner_row_WV][inner_col_WV] = V[k_offset + inner_row_WV + block_k][inner_col_WV + threadblock_wv_col_offset];
 			}
 			__syncthreads();
 			
@@ -78,12 +81,12 @@ namespace winter2024::dual{
 			for (int32_t thread_block_k = 0; thread_block_k < BLOCK_K; ++thread_block_k) {
 				#pragma unroll
 				for(int32_t thread_tm_idx = 0; thread_tm_idx < THREAD_TM; ++thread_tm_idx) {
-					thread_local_x_cache[thread_tm_idx] = shared_x[thread_tm_idx][thread_block_k];
+					thread_local_x_cache[thread_tm_idx] = shared_x[thread_row*THREAD_TM + thread_tm_idx][thread_block_k];
 				}
 				#pragma unroll
 				for(int32_t thread_tn_idx = 0; thread_tn_idx < THREAD_TN; ++thread_tn_idx) {
-					thread_local_W_cache[thread_tn_idx] = shared_W[thread_block_k][thread_tn_idx];
-					thread_local_V_cache[thread_tn_idx] = shared_V[thread_block_k][thread_tn_idx];
+					thread_local_W_cache[thread_tn_idx] = shared_W[thread_block_k][thread_col*THREAD_TN + thread_tn_idx];
+					thread_local_V_cache[thread_tn_idx] = shared_V[thread_block_k][thread_col*THREAD_TN + thread_tn_idx];
 				}
 				#pragma unroll
 				for(int32_t thread_tm_compute_idx = 0; thread_tm_compute_idx < THREAD_TM; ++thread_tm_compute_idx) {
@@ -118,13 +121,10 @@ namespace winter2024::dual{
         int32_t K = x.size(1);
         int32_t N = W.size(1);
 
-        // dim3 threads(SM80_DUAL_PROBLEM_THREADS);
-        // dim3 blocks(B, (D_out + threads.x - 1) / threads.x);
+		dim3 grid(CEIL_DIV(N, BLOCK_N), CEIL_DIV(M, BLOCK_M), 1);
+		dim3 threads(BLOCK_RESULTS / THREAD_RESULTS, 1, 1);
 
-		dim3 blocks(CEIL_DIV(N, BLOCK_N), CEIL_DIV(M, BLOCK_M), 1);
-		dim3 grid(BLOCK_RESULTS / THREAD_RESULTS, 1, 1);
-
-        dual_conv1x1_fp32_cuda_kernel<<<grid, blocks>>>(
+        dual_fc_fp32_cuda_kernel<<<grid, threads>>>(
             x.packed_accessor64<float, 2, torch::RestrictPtrTraits>(),
             W.packed_accessor64<float, 2, torch::RestrictPtrTraits>(),
             V.packed_accessor64<float, 2, torch::RestrictPtrTraits>(),
