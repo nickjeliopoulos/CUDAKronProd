@@ -34,27 +34,15 @@ namespace winter2024::dual{
 		// Allocate shared memory to store a tile of the x row.
         // extern __shared__ float x_tile[SM80_DUAL_PROBLEM_THREADS];
 
-        if (batch < B && d_out < D_out) {
-            // Use the block dimension as the tile size.
-            int32_t tile_size = blockDim.x;
+		// Process the input in tiles.
+		for (int32_t tile_start = 0; tile_start < D_in; tile_start += 1) {
+			left += x[batch][tile_start] * W[tile_start][d_out];
+			right += x[batch][tile_start] * V[tile_start][d_out];
+		}
+		__syncthreads();
 
-            // Process the input in tiles.
-            for (int32_t tile_start = 0; tile_start < D_in; tile_start += tile_size) {
-                // Calculate the number of valid elements in this tile.
-                int32_t current_tile_size = (D_in - tile_start < tile_size) ? (D_in - tile_start) : tile_size;
-
-                // Iterate over the tile elements and update partial sums.
-                for (int32_t i = 0; i < current_tile_size; i++) {
-                    left += x[batch][tile_start + i] * W[tile_start + i][d_out];
-                    right += x[batch][tile_start + i] * V[tile_start + i][d_out];
-                }
-            }
-			__syncthreads();
-
-
-            C[batch][d_out] = left;
-			C[batch][D_out + d_out] = right;
-        }
+		C[batch][d_out] = left;
+		C[batch][D_out + d_out] = right;	
     }
 
 
