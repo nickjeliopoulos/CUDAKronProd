@@ -19,7 +19,7 @@ setup(
         #    name="gorby_kronecker", sources=["kronecker/kronecker.cu"],
         # ),
         CUDAExtension(
-            name="gorby_swiglu", sources=["swiglu/swiglu.cu"],
+            name="gorby_swiglu", sources=["swiglu/swiglu.cu"], extra_compile_args={'nvcc' : ["-arch=sm_80"]}
         )
     ],
     cmdclass={"build_ext": BuildExtension},

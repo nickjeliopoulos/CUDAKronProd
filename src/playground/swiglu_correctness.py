@@ -35,23 +35,32 @@ str_to_dtype_LUT = {
 }
 
 
-### Each entry under size is a Tuple with shape (AM,AN, BM, BN)
-### A = [AM, AN]
-### B = [BM, BN]
-### C = [AM*BM, AN*BN]
+### Workload sizes for testing
+### (D_in, D_out)
 workload_test_sizes = [
-	(2, 256, 2, 256),
-	(4, 256, 4, 256),
-	(8, 256, 8, 256),
-	(16, 256, 16, 256),
-	(32, 256, 32, 256),
-	(64, 256, 64, 256),
-	(32, 768, 32, 768),
+	# (8, 8),
+	# (16, 16),
+	# (32, 32),
+	# (32, 64),
+	# (32, 128),
+	# (64, 32),
+	# (64, 64),
+	# (64, 128),
+	# (128, 32),
+	# (128, 64),
+	# (128, 128),
+	# (256, 256),
+	# (256, 512),
+	# (256, 1024),
+	# (1024, 1024),
+	# (2048, 1024),
+	# (4096, 1024),
+	(2048, 2048),
 ]
 
 
-def torch_swiglu(A : torch.Tensor, B : torch.Tensor) -> torch.Tensor:
-	return torch.nn.functional.silu(A) * B
+def torch_swiglu(x, W, V, b, c) -> torch.Tensor:
+	return torch.nn.functional.silu(x @ W + b) * (x @ V + c)
 
 
 if __name__ == "__main__":
@@ -61,8 +70,8 @@ if __name__ == "__main__":
 	parser.add_argument("--device", type=str, default="cuda")
 	parser.add_argument("--dtype", type=str, choices=["float32", "float16", "bfloat16", "float8"], default="float32")
 	parser.add_argument("--check-runtime-only", action="store_true")
+	parser.add_argument("--timing-bench", action="store_true")
 	args = parser.parse_args()
-
 	device = torch.device(args.device)
 	dtype = str_to_dtype_LUT[args.dtype]
 
@@ -70,22 +79,28 @@ if __name__ == "__main__":
 	test_pass_comparison_list = []
 	failed_test_pass_shapes = []
 
+	### Batch size
+	B = 128
+	b_scalar = 0.0
+	c_scalar = 0.0
+	b = torch.tensor(data=[b_scalar], device=device, dtype=dtype)
+	c = torch.tensor(data=[c_scalar], device=device, dtype=dtype)
 
-	for (AM, AN, BM, BN) in workload_test_sizes:
+	for (D_in, D_out) in workload_test_sizes:
 		### Tensor Init
-		A = torch.randn(AM, AN, device=device, dtype=dtype)
-		B = torch.randn(BM, BN, device=device, dtype=dtype)
+		x = torch.randn(B, D_in, device=device, dtype=dtype)
+		W = torch.randn(D_in, D_out, device=device, dtype=dtype)
+		V = torch.randn(D_in, D_out, device=device, dtype=dtype)
 
 		print(f"{'='*48}")
-		print(f"A = [{A.shape[0]},{A.shape[1]}] | B = [{B.shape[0]},{B.shape[1]}]")
-		print(f"{'='*48}")
+		print(f"x = [{x.shape[0]},{x.shape[1]}] | W = [{W.shape[0]},{W.shape[1]}] | V = [{V.shape[0]},{V.shape[1]}]")
 
 		### Invoke test and baseline
-		test_result = test_operator(A, B)
-		torch_result = torch_swiglu(A, B)
+		test_result = test_operator(x, W, V, b, c)
+		torch_result = torch_swiglu(x, W, V, b, c)
 		
-		print(f"Test: {test_result}")
-		print(f"Reference: {torch_result}")
+		# print(f"Test: {test_result}")
+		# print(f"Reference: {torch_result}")
 
 		if args.check_runtime_only:
 			pass
@@ -97,18 +112,40 @@ if __name__ == "__main__":
 			print(f"All Close? {text}")
 
 			if not numerically_correct:
-				failed_test_pass_shapes.append((AM, AN, BM, BN))
+				failed_test_pass_shapes.append((D_in, D_out))
+				print(f"MaxAbs Diff = {torch.max(torch.abs(test_result - torch_result)):.2e}")
 
-		print(f"\n{'='*48}")
+		# print(f"{'='*48}")
 	
 
 	### Summarize Results
-	if not args.check_runtime_only:
-		all_passed = all(test_pass_comparison_list)
-		text = conditional_colorizer(all_passed, f"{all_passed}", [GREEN, RED])
+	all_passed = all(test_pass_comparison_list)
+	text = conditional_colorizer(all_passed, f"{all_passed}", [GREEN, RED])
 
-		print(f"Overall Pass? {text}")
+
+	print(f"{'='*48}")
+	print(f"Overall Pass? {text}")
+	print(f"Pass Rate = {100 * sum(test_pass_comparison_list)/len(test_pass_comparison_list):.1f}%")
+	print(f"{'='*48}")
+
+
+	if args.timing_bench:
+		D_in, D_out = workload_test_sizes[-1]
+		x = torch.randn(B, D_in, device=device, dtype=dtype)
+		W = torch.randn(D_in, D_out, device=device, dtype=dtype)
+		V = torch.randn(D_in, D_out, device=device, dtype=dtype)
+
+		test_latency = measure_median_latency(test_operator, x, W, V, b, c)
+		torch_latency = measure_median_latency(torch_swiglu, x, W, V, b, c)
+
+		if test_latency < torch_latency:
+			text = conditional_colorizer(True, "FASTER", [GREEN, RED])
+		else:
+			text = conditional_colorizer(False, "SLOWER", [GREEN, RED])
+		
 		print(f"{'='*48}")
-
-		for (AM, AN, BM, BN) in failed_test_pass_shapes:
-			print(f"Failed Workload: A=[{AM},{AN}], B=[{BM},{BN}]")
+		print(f"TIMING TEST")
+		print(f"Test Latency: {test_latency:.2f} ms")
+		print(f"Reference Latency: {torch_latency:.2f} ms")
+		print(f"Test is {text} than Reference")
+		print(f"{'='*48}")

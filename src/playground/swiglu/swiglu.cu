@@ -13,28 +13,56 @@ namespace winter2024::swiglu{
 
     template <typename scalar_t>
     __global__ void swiglu_2d_fp32_cuda_kernel(
-        const scalar_t* __restrict__ A,
-        const scalar_t* __restrict__ B,
-        scalar_t* __restrict__ C,
-        int numel
+		const torch::PackedTensorAccessor64<scalar_t, 2, torch::RestrictPtrTraits> x, 
+		const torch::PackedTensorAccessor64<scalar_t, 2, torch::RestrictPtrTraits> W, 
+		const torch::PackedTensorAccessor64<scalar_t, 2, torch::RestrictPtrTraits> V, 
+		torch::PackedTensorAccessor64<scalar_t, 2, torch::RestrictPtrTraits> C,
+        scalar_t b,
+        scalar_t c,
+        int B, 
+		int D_in, 
+		int D_out
     ) {
-        int idx = blockIdx.x * blockDim.x + threadIdx.x;
-        if (idx < numel) {
-            C[idx] = swish(A[idx]) * B[idx];
-        }
+        int batch = blockIdx.x;  // Each block handles one batch
+        int d_out = blockIdx.y * blockDim.x + threadIdx.x; // Each thread handles one output dimension
+
+		scalar_t left = b;
+		scalar_t right = c;
+		scalar_t x_val = 0;
+
+		if (batch < B && d_out < D_out) {
+			for (int d_in = 0; d_in < D_in; d_in++) {
+				x_val = x[batch][d_in];
+				left += x_val * W[d_in][d_out];
+				right += x_val * V[d_in][d_out];
+			}
+
+			C[batch][d_out] = swish(left) * right;
+		}
     }
 
-    torch::Tensor swiglu(const torch::Tensor& A, const torch::Tensor& B) {
-        auto C = torch::empty_like(A);
-        int numel = A.numel();
-        int threads = 256;
-        int blocks = (numel + threads - 1) / threads;
+    torch::Tensor swiglu(const torch::Tensor& x, const torch::Tensor& W, const torch::Tensor& V, const torch::Tensor& b, const torch::Tensor& c) {
+        auto C = torch::empty({x.size(0), W.size(1)}, x.options());
+        int B = x.size(0);
+        int D_in = x.size(1);
+        int D_out = W.size(1);
 
-        AT_DISPATCH_FLOATING_TYPES(A.scalar_type(), "swiglu_cuda", ([&] {
-            swiglu_2d_fp32_cuda_kernel<scalar_t><<<blocks, threads>>>(
-                A.data_ptr<scalar_t>(), B.data_ptr<scalar_t>(), C.data_ptr<scalar_t>(), numel);
-        }));
+        dim3 threads(256);
+        dim3 blocks(B, (D_out + threads.x - 1) / threads.x);
+		size_t sharedMemSize = sizeof(float) * threads.x * 2;
 
+		swiglu_2d_fp32_cuda_kernel<float><<<blocks, threads, sharedMemSize>>>(
+			x.packed_accessor64<float, 2, torch::RestrictPtrTraits>(),
+			W.packed_accessor64<float, 2, torch::RestrictPtrTraits>(),
+			V.packed_accessor64<float, 2, torch::RestrictPtrTraits>(),
+			C.packed_accessor64<float, 2, torch::RestrictPtrTraits>(),
+			b.item<float>(), 
+			c.item<float>(),
+			B, 
+			D_in, 
+			D_out
+		);
+        
         return C;
     }
 }
