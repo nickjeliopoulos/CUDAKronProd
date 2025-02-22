@@ -94,8 +94,8 @@ namespace winter2024::dual{
 		#pragma unroll
 		for(int32_t thread_tm_idx = 0; thread_tm_idx < THREAD_TM; ++thread_tm_idx) {
 			for(int32_t thread_tn_idx = 0; thread_tn_idx < THREAD_TN; ++thread_tn_idx) {
-				C[thread_row * THREAD_TM + thread_tm_idx][thread_col * THREAD_TN + thread_tn_idx    ] = thread_result_xW_cache[thread_tm_idx][thread_tn_idx];	
-				C[thread_row * THREAD_TM + thread_tm_idx][thread_col * THREAD_TN + thread_tn_idx + N] = thread_result_xW_cache[thread_tm_idx][thread_tn_idx];		
+				C[thread_row * THREAD_TM + thread_tm_idx][thread_col * THREAD_TN + thread_tn_idx    ] = thread_result_xW_cache[thread_tm_idx][thread_tn_idx] + b;	
+				C[thread_row * THREAD_TM + thread_tm_idx][thread_col * THREAD_TN + thread_tn_idx + N] = thread_result_xV_cache[thread_tm_idx][thread_tn_idx] + c;		
 			}
 		}
     }

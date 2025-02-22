@@ -38,12 +38,12 @@ str_to_dtype_LUT = {
 ### Workload sizes for testing
 ### (D_in, D_out)
 workload_test_sizes = [
-	# (256, 256),
-	# (256, 512),
-	# (256, 1024),
-	# (1024, 1024),
-	# (2048, 1024),
-	# (4096, 1024),
+	(256, 256),
+	(256, 512),
+	(256, 1024),
+	(1024, 1024),
+	(2048, 1024),
+	(4096, 1024),
 	(2048, 2048),
 	# (4096, 4096),
 ]
@@ -81,8 +81,8 @@ if __name__ == "__main__":
 
 	### Batch size
 	B = 128
-	b_scalar = 0.0
-	c_scalar = 0.0
+	b_scalar = 1.0
+	c_scalar = 1.0
 	b = torch.tensor(data=[b_scalar], device=device, dtype=dtype)
 	c = torch.tensor(data=[c_scalar], device=device, dtype=dtype)
 
