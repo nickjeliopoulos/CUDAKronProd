@@ -41,6 +41,12 @@ namespace winter2024::dual{
 		const int32_t inner_row_WV = threadIdx.x / BLOCK_N;
 		const int32_t inner_col_WV = threadIdx.x % BLOCK_N;
 
+		// Block offsets
+		const int32_t threadblock_x_row_offset = blockIdx.y * BLOCK_M;
+		const int32_t threadblock_wv_col_offset = blockIdx.x * BLOCK_N;
+		const int32_t threadblock_c_row_offset = threadblock_x_row_offset;
+		const int32_t threadblock_c_col_offset = threadblock_wv_col_offset;
+
 		// Init Shared Memory
 		__shared__ float shared_x[BLOCK_M][BLOCK_K];
 		__shared__ float shared_W[BLOCK_K][BLOCK_N];
@@ -58,12 +64,12 @@ namespace winter2024::dual{
 		for( int32_t block_k = 0; block_k < K; block_k += BLOCK_K ) {
 			// SMEM x Population
 			for( int32_t m_offset = 0; m_offset < BLOCK_M; m_offset += inner_row_x_stride ) {
-				shared_x[(m_offset + inner_row_x)][inner_col_x] = x[m_offset + inner_row_x][inner_col_x];
+				shared_x[(m_offset + inner_row_x)][inner_col_x] = x[m_offset + inner_row_x + threadblock_x_row_offset][inner_col_x + block_k];
 			}
 			// SMEM W,V Population
-			for( int32_t n_offset = 0; n_offset < BLOCK_N; n_offset += inner_row_WV_stride ) {
-				shared_W[(n_offset + inner_row_WV)][inner_col_WV] = W[n_offset + inner_row_WV][inner_col_WV];
-				shared_V[(n_offset + inner_row_WV)][inner_col_WV] = V[n_offset + inner_row_WV][inner_col_WV];
+			for( int32_t k_offset = 0; k_offset < BLOCK_N; k_offset += inner_row_WV_stride ) {
+				shared_W[(k_offset + inner_row_WV)][inner_col_WV] = W[k_offset + inner_row_WV + block_k][inner_col_WV + threadblock_wv_col_offset];
+				shared_V[(k_offset + inner_row_WV)][inner_col_WV] = V[k_offset + inner_row_WV + block_k][inner_col_WV + threadblock_wv_col_offset];
 			}
 			__syncthreads();
 			
@@ -94,8 +100,8 @@ namespace winter2024::dual{
 		#pragma unroll
 		for(int32_t thread_tm_idx = 0; thread_tm_idx < THREAD_TM; ++thread_tm_idx) {
 			for(int32_t thread_tn_idx = 0; thread_tn_idx < THREAD_TN; ++thread_tn_idx) {
-				C[thread_row * THREAD_TM + thread_tm_idx][thread_col * THREAD_TN + thread_tn_idx    ] = thread_result_xW_cache[thread_tm_idx][thread_tn_idx] + b;	
-				C[thread_row * THREAD_TM + thread_tm_idx][thread_col * THREAD_TN + thread_tn_idx + N] = thread_result_xV_cache[thread_tm_idx][thread_tn_idx] + c;		
+				C[thread_row * THREAD_TM + thread_tm_idx + threadblock_c_row_offset][thread_col * THREAD_TN + thread_tn_idx + threadblock_c_col_offset    ] = thread_result_xW_cache[thread_tm_idx][thread_tn_idx] + b;	
+				C[thread_row * THREAD_TM + thread_tm_idx + threadblock_c_row_offset][thread_col * THREAD_TN + thread_tn_idx + threadblock_c_col_offset + N] = thread_result_xV_cache[thread_tm_idx][thread_tn_idx] + c;		
 			}
 		}
     }
