@@ -1,6 +1,7 @@
 import torch
 import argparse
 import gorby_swiglu
+import gorby_dual
 from torch.utils.benchmark import Timer
 from typing import *
 
@@ -80,7 +81,7 @@ if __name__ == "__main__":
 	failed_test_pass_shapes = []
 
 	### Batch size
-	B = 128
+	B = 256
 	b_scalar = 0.0
 	c_scalar = 0.0
 	b = torch.tensor(data=[b_scalar], device=device, dtype=dtype)
@@ -125,7 +126,7 @@ if __name__ == "__main__":
 
 	print(f"{'='*48}")
 	print(f"Overall Pass? {text}")
-	print(f"Pass Rate = {100 * sum(test_pass_comparison_list)/len(test_pass_comparison_list):.1f}%")
+	# print(f"Pass Rate = {100 * sum(test_pass_comparison_list)/len(test_pass_comparison_list):.1f}%")
 	print(f"{'='*48}")
 
 
