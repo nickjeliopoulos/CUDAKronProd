@@ -62,7 +62,9 @@ namespace winter2024::dual{
 		float thread_local_W_cache[THREAD_TN] = {0.0f};
 		float thread_local_V_cache[THREAD_TN] = {0.0f};
 		
-
+		// Question. Is it better to do W, V related operations at the same time, or is it better do do xW + b, then xV + c?
+		// Theoretically this might help with live registers / register pressure if they were done sequentially.
+		// Unsure about warp scheduling effects however.
 		// Outer Block Loop
 		for( int32_t block_k = 0; block_k < K; block_k += BLOCK_K ) {
 			// SMEM x Population

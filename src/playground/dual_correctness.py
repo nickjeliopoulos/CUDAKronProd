@@ -44,8 +44,9 @@ workload_test_sizes = [
 	# (1024, 1024),
 	# (2048, 1024),
 	# (4096, 1024),
-	(2048, 2048),
+	# (2048, 2048),
 	# (4096, 4096),
+	(8192, 8192),
 ]
 
 
@@ -60,6 +61,14 @@ def torch_dual_fc(x, W, V, b, c) -> torch.Tensor:
 	### Right
 	C[:,D_out:2*D_out] = torch.matmul(x, V) + c
 
+	return C
+
+
+def torch_stacked_fc(x, W, b, c) -> torch.Tensor:
+	C = torch.matmul(x, W)
+	# print(f"C = {C.shape}")
+	C[:,0:D_out] += b
+	C[:,D_out:2*D_out] += c
 	return C
 
 
@@ -80,7 +89,7 @@ if __name__ == "__main__":
 	failed_test_pass_shapes = []
 
 	### Batch size
-	B = 128
+	B = 256
 	b_scalar = 1.0
 	c_scalar = 1.0
 	b = torch.tensor(data=[b_scalar], device=device, dtype=dtype)
@@ -98,6 +107,7 @@ if __name__ == "__main__":
 		### Invoke test and baseline
 		test_result = test_operator(x, W, V, b, c)
 		torch_result = torch_dual_fc(x, W, V, b, c)
+		torch_stacked_result = torch_stacked_fc(x, torch.cat([W,V], dim=-1).contiguous(), b, c)
 		
 		# print(f"Test: {test_result}")
 		# print(f"Reference: {torch_result}")
@@ -110,6 +120,7 @@ if __name__ == "__main__":
 			text = conditional_colorizer(numerically_correct, f"{numerically_correct}", [GREEN, RED])
 			
 			print(f"All Close? {text}")
+			print(f"Torch Stacked vs. Torch All Close: {torch.allclose(torch_stacked_result, torch_result)}")
 
 			if not numerically_correct:
 				failed_test_pass_shapes.append((D_in, D_out))
@@ -123,7 +134,6 @@ if __name__ == "__main__":
 
 	print(f"{'='*48}")
 	print(f"Overall Pass? {text}")
-	# print(f"Pass Rate = {100 * sum(test_pass_comparison_list)/len(test_pass_comparison_list):.1f}%")
 	print(f"{'='*48}")
 
 
@@ -135,6 +145,7 @@ if __name__ == "__main__":
 
 		test_latency = measure_median_latency(test_operator, x, W, V, b, c)
 		torch_latency = measure_median_latency(torch_dual_fc, x, W, V, b, c)
+		torch_stacked_latency = measure_median_latency(torch_stacked_fc, x, torch.randn(size=(8192, 2*8192), device=device, dtype=dtype), b, c)
 
 		if test_latency < torch_latency:
 			text = conditional_colorizer(True, "FASTER", [GREEN, RED])
@@ -144,6 +155,8 @@ if __name__ == "__main__":
 		print(f"{'='*48}")
 		print(f"TIMING TEST")
 		print(f"Test Latency: {test_latency:.2f} ms")
-		print(f"Reference Latency: {torch_latency:.2f} ms")
-		print(f"Test is {text} than Reference")
+		print(f"Torch Latency: {torch_latency:.2f} ms")
+		print(f"Torch Stacked Latency: {torch_stacked_latency:.2f} ms")
+		print(f"Test is {text} than Torch")
 		print(f"{'='*48}")
+
