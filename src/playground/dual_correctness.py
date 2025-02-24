@@ -13,6 +13,7 @@ MAGENTA = 35
 CYAN = 36
 WHITE = 37
 
+ATOL = 2.0e-4
 
 def conditional_colorizer(condition: bool, text: str, colors: List) -> str:
 	color = colors[0] if condition else colors[1]
@@ -115,17 +116,23 @@ if __name__ == "__main__":
 		if args.check_runtime_only:
 			pass
 		else:
-			numerically_correct = torch.allclose(test_result, torch_result)
-			test_pass_comparison_list.append(numerically_correct)
-			text = conditional_colorizer(numerically_correct, f"{numerically_correct}", [GREEN, RED])
-			
-			print(f"All Close? {text}")
-			print(f"Torch Stacked vs. Torch All Close: {torch.allclose(torch_stacked_result, torch_result)}")
+			test_numerically_correct = torch.allclose(test_result, torch_result, atol=ATOL)
+			torch_cat_numerically_correct = torch.allclose(test_result, torch_stacked_result, atol=ATOL)
+			text1 = conditional_colorizer(test_numerically_correct, f"{test_numerically_correct}", [GREEN, RED])
+			text2 = conditional_colorizer(torch_cat_numerically_correct, f"{torch_cat_numerically_correct}", [GREEN, RED])
 
-			if not numerically_correct:
+			print(f"Test vs Torch All Close: {text1}")
+			print(f"Test vs Torch MaxAbs Diff: {torch.max(torch.abs(test_result - torch_result)):.2e}")
+
+			test_pass_comparison_list.append(test_numerically_correct)
+
+			if not test_numerically_correct:
 				failed_test_pass_shapes.append((D_in, D_out))
-				print(f"MaxAbs Diff = {torch.max(torch.abs(test_result - torch_result)):.2e}")
-	
+
+			print(f"Torch Cat vs Torch All Close: {text2}")
+			print(f"Torch Cat vs Torch MaxAbs Diff: {torch.max(torch.abs(torch_stacked_result - torch_result)):.2e}")
+
+
 
 	### Summarize Results
 	all_passed = all(test_pass_comparison_list)

@@ -78,7 +78,6 @@ namespace winter2024::dual{
 			}
 			__syncthreads();
 			
-
 			// Inner Thread Compute Loop
 			for (int32_t thread_block_k = 0; thread_block_k < BLOCK_K; ++thread_block_k) {
 				#pragma unroll
