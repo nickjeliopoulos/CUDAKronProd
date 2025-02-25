@@ -45,9 +45,9 @@ workload_test_sizes = [
 	# (1024, 1024),
 	# (2048, 1024),
 	# (4096, 1024),
-	# (2048, 2048),
+	(2048, 2048),
 	# (4096, 4096),
-	(8192, 8192),
+	# (8192, 8192),
 ]
 
 
@@ -133,16 +133,13 @@ if __name__ == "__main__":
 			print(f"Torch Cat vs Torch MaxAbs Diff: {torch.max(torch.abs(torch_stacked_result - torch_result)):.2e}")
 
 
-
 	### Summarize Results
 	all_passed = all(test_pass_comparison_list)
 	text = conditional_colorizer(all_passed, f"{all_passed}", [GREEN, RED])
 
-
 	print(f"{'='*48}")
 	print(f"Overall Pass? {text}")
 	print(f"{'='*48}")
-
 
 	if args.timing_bench:
 		D_in, D_out = workload_test_sizes[-1]
@@ -152,7 +149,7 @@ if __name__ == "__main__":
 
 		test_latency = measure_median_latency(test_operator, x, W, V, b, c)
 		torch_latency = measure_median_latency(torch_dual_fc, x, W, V, b, c)
-		torch_stacked_latency = measure_median_latency(torch_stacked_fc, x, torch.randn(size=(8192, 2*8192), device=device, dtype=dtype), b, c)
+		torch_stacked_latency = measure_median_latency(torch_stacked_fc, x, torch.randn(size=(D_in, 2*D_out), device=device, dtype=dtype), b, c)
 
 		if test_latency < torch_latency:
 			text = conditional_colorizer(True, "FASTER", [GREEN, RED])
